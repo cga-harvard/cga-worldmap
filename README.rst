@@ -88,52 +88,56 @@ Install
 
 The following steps should prepare a Python virtual environment for you.  Note that you will need 
 to manually create a PostGIS datbase and user first.  The default connection settings are
-stored in src/GeoNodePy/geonode/settings.py:
+stored in geonode/settings/base.py:
+
 database name: wm_db
 user: wm_user
 password: wm_password
 
+Here are the instructions for Ubuntu 12.04, after above dependencies have been installed::
 
-  git clone git://github.com/cga-harvard/cga-worldmap.git cga-worldmap
-  
+  # Setup virtualenv tools
+  sudo pip install virtualenvwrapper
+
+  # Add virtualenvwrapper to your environment
+  export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python
+  export WORKON_HOME=~/.venvs
+  source /usr/local/bin/virtualenvwrapper.sh
+  export PIP_DOWNLOAD_CACHE=$HOME/.pip-downloads
+
+  # Setup a virtualenv for geonode
+  mkvirtualenv worldmap
+  workon worldmap
+
+  #Get the worldmap source code
+  git clone git://github.com/cga-harvard/cga-worldmap.git
+
+  #Get worldmap python requirements
   cd cga-worldmap
-  
+  pip install -r requirements/base.txt
+
+  # Prepare worldmap application
   git submodule update --init
-  
-  python bootstrap.py --no-site-packages # see note1 below
-  
-  source bin/activate
-  
-  paver build # see note2 below
-  
-  django-admin.py createsuperuser --settings=geonode.settings
+  paver setup (see note below)
+
+  #Create a superuser
+  python manage.py createsuperuser
+
+  # Start the development servers
+  paver start
+
+  # Visit the development geonode site
+  http://localhost:8000
+
+  # Stop the server
+  paver stop
 
 
-Start the server:
-  paver host
 
 
-Once fully started, you should see a message indicating the address of your WorldMap::
-  
-  Development GeoNode is running at http://localhost:8000/
-  The GeoNode is an unstoppable machine
-  Press CTRL-C to shut down
+* note:
 
-
-.. note1::
-
-  When running ``python bootstrap.py`` the ``--no-site-packages`` option is
-  not required.  If enabled, the bootstrap script will sandbox your virtual
-  environment from any packages that are installed in the system, useful if
-  you have incompatible versions of libraries such as Django installed
-  system-wide.  On the other hand, sometimes it is useful to use a version of
-  the Python Imaging Library provided by your operating system
-  vendor, or packaged other than on PyPI.  When in doubt, however, just leave
-  this option in.
-
-.. note2::
-
-  When running "pave build" command, if error about version string parsing occurs, 
+  When running "paver setup" command, if error about version string parsing occurs,
   edit ~/cga-worldmap/lib/python2.7/site-packages/django/contrib/gis/geos/libgeos.py,
   search for "ver = geos_version()" under "def geos_version_info()", 
   edit "ver = geos_version()" to "ver = geos_version().split(' ')[0]".
@@ -142,7 +146,7 @@ Once fully started, you should see a message indicating the address of your Worl
 
 This command::
 
-  django-admin.py createsuperuser --settings=geonode.settings
+  python manage.py createsuperuser
 
 can be used to create additional administrative user accounts.  The administrative control panel is not
 linked from the main site, but can be accessed at http://localhost:8000/admin/

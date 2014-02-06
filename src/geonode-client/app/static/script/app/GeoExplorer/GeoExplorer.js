@@ -334,7 +334,7 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
         if (!config.map) {
             config.map = {};
         }
-        config.map.numZoomLevels = 22;
+        config.map.numZoomLevels = 21;
 
         OpenLayers.Map.prototype.Z_INDEX_BASE = {
             BaseLayer: 100,
@@ -1098,22 +1098,32 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
 
 
                 Ext.Ajax.request({
-                    url: "/maps/addgeonodelayer/?" + thisRecord.get("name"),
+                    url: "/maps/addgeonodelayer/",
                     method: "POST",
-                    params: {layername:thisRecord.get("name")},
+                    params: {uuid:thisRecord.get("uuid")},
 
                     success: function(result, request) {
                         var jsonData = Ext.util.JSON.decode(result.responseText);
                         layer = jsonData.layer;
+                        var local = layer.url.indexOf(
+                            geoEx.localGeoServerBaseUrl.replace(
+                                this.urlPortRegEx, "$1/")) === 0;
+                        if (!local) {
+                            //Need to create a new source
+                            source = geoEx.addLayerSource({"config":layer.source_params});
+                            key = source.id;
+                        }
+
                         layer.source = key;
                         layer.buffer = 0;
                         layer.tiled = true;
-                        //console.log('BBOX:' + layer.llbbox);
+
                         var record = source.createLayerRecord(layer);
                         record.selected = true;
                         //console.log('Created record');
                         ////console.log('GROUP:' + record.get("group"));
                         if (record) {
+
                             if (record.get("group") === "background") {
                                 var pos = layerStore.queryBy(
                                     function(rec) {

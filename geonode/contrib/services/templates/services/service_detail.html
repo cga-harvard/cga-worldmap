@@ -1,0 +1,90 @@
+{% extends "page_layout.html" %}
+{% load i18n %}
+{% load geonode_auth %}
+
+{% block head %}
+{% include "geonode/ext_header.html" %}
+{% include "geonode/app_header.html" %}
+{% include "geonode/geo_header.html" %}
+{{ block.super }}
+<script type="text/javascript">
+var app;
+{% autoescape off %}
+Ext.onReady(function() {
+{% has_obj_perm user service "maps.change_service_permissions" as can_change_permissions %}
+
+{% if can_change_permissions %}
+       new GeoNode.WorldMapPermissionsEditor({
+                renderTo: "permissions_form",
+                submitTo: "{% url geonode.contrib.services.views.ajax_service_permissions service.id %}",
+                userLookup: "{% url geonode.views.ajax_lookup %}",
+                customGroup: "{{ customGroup }}",
+                permissions: {{ permissions_json }},
+        levels: {
+            'admin': 'layer_admin',
+                    'readwrite': 'layer_readwrite',
+                    'readonly': 'layer_readonly',
+                    'none': '_none'
+        },
+        listeners: {
+            updated: function(perms) {
+                var submitTo = "{% url geonode.contrib.services.views.ajax_service_permissions service.id %}";
+                Ext.Ajax.request({ url: submitTo, jsonData: perms.writePermissions() });
+            }
+        }
+    });
+    {% endif %}
+});
+{% endautoescape %}
+</script>
+{% endblock %}
+
+{% block main %}
+<div class="twocol">
+  <h3>{{service.title|default:service.name}}</h3>
+  <p><strong>{% trans "Name:" %}</strong> {{service.name}}</p>
+  <p><strong>{% trans "URL:" %}</strong> {{service.base_url}}</p>
+  <p><strong>{% trans "Abstract:" %}</strong> {{service.abstract}}</p>
+  <p><strong>{% trans "Contact:" %}</strong> <a href="{{ service.owner.get_profile.get_absolute_url }}">{{ service.owner }}</a></a></p>
+    {% autoescape off %}
+    <h3>{% trans "Layers" %}</h3>
+    <p>{% trans "This Service contains the following layers" %} </p>
+    <table>
+        <tr><th style="width:50%">Title</th><th>Description</th></tr>
+        {% for layer in layers %}
+        {% if not layer.group == "background" %}
+        <tr>
+            <td><a href='{{ layer.get_absolute_url }}'>{{layer.title}}</a></td>
+            <td>{{layer.abstract}}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+    </table>
+    {% endautoescape %}
+
+</div>
+{% endblock %}
+{% block sidebar %}
+<div id="sidebar" class="threecol">
+
+    {% has_obj_perm user service "maps.change_service" as can_change %}
+    {% has_obj_perm user service "maps.delete_service" as can_remove %}
+    {% has_obj_perm user service "maps.change_service_permissions" as can_change_permissions %}
+    {% if can_change or can_remove or can_change_permissions %}
+        <h3>{% trans "Manage" %}</h3>
+        <ul>
+        {% if can_change %}
+            <li><a href="{% url edit_service service.id %}">{% trans "Edit Service Metadata" %}</a></li>
+        {% endif %}
+        {% if can_remove %}
+            <li><a href="{% url remove_service service.id %}">{% trans "Remove Service" %}</a></li>
+        {% endif %}
+        </ul>
+        {% if can_change_permissions %}
+            <h3>{% trans "Permissions" %}</h3>
+            <p>{% trans "Select what kind of privileges to allow for this service." %}</p>
+            <div id="permissions_form"></div>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
