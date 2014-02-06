@@ -22,6 +22,8 @@ __author__ = 'mbertrand'
 logger = logging.getLogger("geonode.gazetteer.utils")
 
 '''
+To use full text search in PostgreSQL, run the following:
+
 ALTER TABLE gazetteer_gazetteerentry ADD COLUMN placename_tsv tsvector;
 CREATE INDEX placename_tsv_index on gazetteer_gazetteerentry using gin(placename_tsv);
 UPDATE gazetteer_gazetteerentry SET text_search =
