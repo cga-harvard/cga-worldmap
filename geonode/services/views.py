@@ -263,6 +263,7 @@ def _process_wms_service(url, name, type, username, password, wms=None, owner=No
     """
     Create a new WMS/OWS service, cascade it if necessary (i.e. if Web Mercator not available)
     """
+    logger.info("Processing the WMS service "+ url)
     if wms is None:
         wms = WebMapService(url)
     try:
@@ -289,7 +290,6 @@ def _process_wms_service(url, name, type, username, password, wms=None, owner=No
                             status=200)
     except:
         pass
-
     title = wms.identification.title
     if not name:
         if title:
@@ -310,7 +310,7 @@ def _register_cascaded_service(url, type, name, username, password, wms=None, ow
     """
     Register a service as cascading WMS
     """
-
+    logger.info("Processing "+ url + "as a cascaded service")
     try:
         service = Service.objects.get(base_url=url)
         return_dict = {}
@@ -435,6 +435,7 @@ def _register_cascaded_layers(service, owner=None):
     """
     Register layers for a cascading WMS
     """
+    logger.info("Registering layers for %s" % service.base_url)
     if service.type == 'WMS' or service.type == "OWS":
         cat = Catalog(settings.OGC_SERVER['default']['LOCATION'] + "rest",
                       _user, _password)
@@ -455,6 +456,7 @@ def _register_cascaded_layers(service, owner=None):
             lyr = cat.get_resource(layer, store, cascade_ws)
             if lyr is None:
                 if service.type in ["WMS", "OWS"]:
+                    logger.info("Importing " +layer+ " as layer") 
                     resource = cat.create_wmslayer(cascade_ws, store, layer)
                 elif service.type == "WFS":
                     resource = cat.create_wfslayer(cascade_ws, store, layer)
@@ -515,6 +517,7 @@ def _register_indexed_service(type, url, name, username, password, verbosity=Fal
     """
     Register a service - WMS or OWS currently supported
     """
+    logger.info("Processing "+ url + "as a WMS indexed service")
     if type in ['WMS', "OWS", "HGL"]:
         # TODO: Handle for errors from owslib
         if wms is None:
@@ -949,8 +952,6 @@ def _process_arcgis_folder(folder, name, services=[], owner=None, parent=None):
 <<<<<<< HEAD
     logger.debug("The folder name is "+ folder.url)
     try:
-        request = requests.get(folder.url)
-        json_return = json.loads(request.text)
         for service in folder.services:
             return_dict = {}
             if not isinstance(service, ArcMapService):
