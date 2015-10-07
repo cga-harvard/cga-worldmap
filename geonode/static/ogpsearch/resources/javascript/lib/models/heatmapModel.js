@@ -1,9 +1,9 @@
 
-if (typeof OpenGeoportal === 'undefined') 
+if (typeof OpenGeoportal === 'undefined')
 {
     OpenGeoportal = {};
 }
-if (typeof OpenGeoportal.Models === 'undefined') 
+if (typeof OpenGeoportal.Models === 'undefined')
 {
     OpenGeoportal.Models = {};
 }
@@ -32,7 +32,7 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
         fetchOn: false,
         searcher: function() {return OpenGeoportal.ogp.search;},
 
-	/* 
+	/*
 	   return the url that supplies data for the model
 	   url is the same as the last Solr query with an area filter added
 	*/
@@ -109,7 +109,7 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
 	    jQuery("#map").attr("title", "Number of layers =     ");
 	    jQuery("#map").tooltip({track: true});
 	    OpenGeoportal.ogp.map.events.register("mousemove", OpenGeoportal.ogp.map,
-						  function(event) {that.processEvent(that, event);}, 
+						  function(event) {that.processEvent(that, event);},
 						  true);
 	    return heatmapLayer;
 
@@ -141,15 +141,15 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
 	    var minimumLongitude = heatmapObject[7];
 	    var maximumLongitude = heatmapObject[9];
 	    var deltaLongitude = maximumLongitude - minimumLongitude;
-	    
+
 	    var stepsLatitude = heatmap.length;
 	    var stepsLongitude = heatmap[0].length;
 	    var stepSizeLatitude = deltaLatitude / stepsLatitude;
 	    var stepSizeLongitude = deltaLongitude / stepsLongitude;
-	    
+
 	    var latitudeIndex = Math.floor((latitude - minimumLatitude) / stepSizeLatitude);
 	    var longitudeIndex = Math.floor((longitude - minimumLongitude) / stepSizeLongitude);
-	    
+
 	    if (latitudeIndex < 0) latitudeIndex = 0;
 	    if (longitudeIndex < 0) longitudeIndex = 0;
 	    try
@@ -188,8 +188,20 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
 		if (jenksClassifications[i] < 0)
 		    jenksClassifications[i] = 0;
 	    }
+      jenksClassifications = that.cleanupClassifications(jenksClassifications);
 	    return jenksClassifications;
 	},
+
+  cleanupClassifications: function(classifications)
+          {
+              // classifications with multiple 0 can cause problems
+              var lastZero = classifications.lastIndexOf(0);
+              if (lastZero == -1)    // does the array have a zero
+                  return classifications;    // if not, nothing to do
+              var newClassifications = classifications.slice(lastZero, classifications.length);
+              return newClassifications;
+          },
+
 
 	getColors: function()
 	{
@@ -199,7 +211,7 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
 	},
 
 	/*
-	  convert Jenks classifications to Brewer colors 
+	  convert Jenks classifications to Brewer colors
 	*/
 	getColorGradient: function(that, classifications)
 	{
@@ -255,7 +267,7 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
 	{
 	    var factor = [1.6, 1.5, 2.6, 2.4, 2.2, 1.8, 2., 2., 2.];
 	    var zoomLevel = OpenGeoportal.ogp.map.getZoom();
-	    if (zoomLevel <1) 
+	    if (zoomLevel <1)
 		return 1;
 	    var index = zoomLevel - 1;
 	    if (index > factor.length - 1)
@@ -290,7 +302,7 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
 
 
 	/**
-	   the heatmap object is an array 
+	   the heatmap object is an array
 	   it has fields for the count array as well as the extent and step sizes
 	 */
 	drawHeatmapOpenLayers: function(that, heatmapObject)
@@ -306,7 +318,7 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
 		return;
 	    stepsLatitude = heatmapObject[5];  //heatmap.length;
 	    stepsLongitude = heatmapObject[3];   //heatmap[0].length;
-	    
+
 	    minMaxValue = that.heatmapMinMax(heatmap, stepsLatitude, stepsLongitude);
 	    //ceilingValues = getCeilingValues(heatmap);
 	    minValue = minMaxValue[0];
@@ -322,7 +334,7 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
 
 	    var stepSizeLatitude = deltaLatitude / stepsLatitude;
 	    var stepSizeLongitude = deltaLongitude / stepsLongitude;
-	    
+
 	    that.classifications = that.getClassifications(that, heatmap);
 	    var colrGradient = that.getColorGradient(that, that.classifications);
 	    that.heatmapLayer.setGradientStops(colorGradient);
@@ -357,5 +369,3 @@ OpenGeoportal.Models.Heatmap = Backbone.Model.extend(
     }
 
 );
-
-
