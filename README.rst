@@ -24,7 +24,7 @@ software installed and in your PATH:
 
 * The GDAL geographic raster access library: http://www.gdal.org/
 
-* The OGR geographic vector data access library: http://www.gdal.org/ogr/
+* The OGR geographic vector data access library: http://www.gdal.org/
 
 * Sun Java Development Kit 1.5 or Higher: 
   - To verify that it is available, run
