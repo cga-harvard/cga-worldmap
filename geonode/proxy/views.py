@@ -24,6 +24,7 @@ WMT_MS_Capabilities|WMS_DescribeLayerResponse|\
 \{http\:\/\/www\.opengis\.net\/gml\}FeatureCollection|msGMLOutput|\
 \{http\:\/\/www.opengis\.net\/wfs\}FeatureCollection|\
 rss|{http://www.w3.org/2005/Atom}feed|\
+\{http\:\/\/www\.w3\.org\/2001\/XMLSchema\}schema|\
 {http://www.w3.org/1999/02/22-rdf-syntax-ns#}RDF"
 
 _user, _password = settings.GEOSERVER_CREDENTIALS
@@ -76,6 +77,7 @@ def proxy(request):
             status=result.status,
             content_type=result.getheader("Content-Type", "text/plain")
             )
+
     return response
 
 
@@ -84,6 +86,10 @@ def valid_response(responseContent):
 
     #ArcGIS Server GetFeatureInfo xml response
     if re.match("<FeatureInfoResponse", responseContent):
+        return responseContent
+
+    # ows exceptions
+    if "<ows:ExceptionReport" in responseContent:
         return responseContent
 
     if responseContent[0] == "<":

@@ -22,15 +22,10 @@
     {
         Ext.select('*.su_only_gaz').setStyle('display', (checkbox.checked ? 'inline': 'none'))
     }
-
-
 </script>
 
 {{block.super}}
 <script type="text/javascript">
-
-
-
     Ext.onReady(function() {
         {% autoescape off %}
         // get #poc_form and #metadata_form, and add a `onchange` handler
@@ -111,6 +106,11 @@
             <input type="checkbox" value="include" name="gazetteer_include" id="gazetteer_include" {% if layer.in_gazetteer %}checked="checked"{% endif %} onclick="showGazetteerOptions(this);">Include in gazetteer
             </div>
             <div class="su_only_gaz">
+                <div class="gazetteer_warning">
+                    *NOTE: By adding your layer features to the gazetteer, they will be searchable and viewable
+                    by anyone regardless of your layer's security permissions.<br />
+                    If you do not choose at least one depict-date field, the system will use the depict-date in the layer metadata (if any).
+                </div>
                 Optional:
                     <table cellpadding="5" cellspacing="5" style="margin-left:20px;">
                         <tr><td colspan="2">{{gazetteer_form.project.label_tag}}: {{gazetteer_form.project}}</td></tr>
@@ -125,6 +125,10 @@
                             <td id="endDateFormatCell" style="display:none">{{gazetteer_form.endDateFormat.label_tag}}: {{gazetteer_form.endDateFormat}} {%  trans "Examples: 'YYYY', 'MM/DD/YYYY', 'YYYY/MM/DD'"  %} </td>
                         </tr>
                     </table>
+                <div class="gazetteer_warning">
+                    Please see Section 7.1 of the Help document (link is at upper right) for details on accessing all gazetteers
+                    via a RESTful API.
+                </div>
             </div>
           </p>
           <legend>Attributes</legend>

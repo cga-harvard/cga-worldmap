@@ -76,8 +76,8 @@ geonode_client_target_war = path('webapps/geonode-client.war')
 deploy_req_txt = """
 # NOTE... this file is generated
 -r %s/shared/requirements.txt
--e .
-""" % (os.getcwd())
+-e %s/src/GeoNodePy
+""" % (os.getcwd(), os.getcwd())
 
 @task
 def auto(options):
@@ -114,7 +114,7 @@ def install_deps(options):
              'Use "paver bundle_deps" to create an install bundle')
         pip_install("-r shared/%s" % options.config.corelibs)
         pip_install("-r shared/%s" % options.config.devlibs)
-        pip_install('-e .')
+        pip_install('-e %s' %(path(".")))
         if options.config.platform == "win32":
             info("You will need to install 'PIL' and 'ReportLab' " \
                  "separately to do PDF generation")
@@ -304,11 +304,17 @@ def setup_geonode_client(options):
 def sync_django_db(options):
     sh("django-admin.py syncdb --settings=geonode.settings --noinput")
     try:
-        sh("django-admin.py syncdb --database=wmdata --settings=geonode.settings --noinput")
-    except:
-        info("******CREATION OF GAZETTEER TABLE FAILED - if you want the gazetteer enabled, \n \
-unescape the 'DATABASES' AND 'DATABASE_ROUTERS' settings in your settings file \n \
-and modify the default values if necessary")
+        from geonode import settings
+        if settings.USE_GAZETTEER and settings.GAZETTEER_DB_ALIAS:
+            sh("django-admin.py syncdb --database=%s --settings=geonode.settings --noinput" % settings.GAZETTEER_DB_ALIAS)
+            sh("django-admin.py migrate gazetteer --database=%s --settings=geonode.settings --noinput" % settings.GAZETTEER_DB_ALIAS)
+    except Exception as e:
+        info("""
+******CREATION OF GAZETTEER TABLE FAILED - if you want the gazetteer data saved
+in the geodata store database instead of the default database, unescape the
+DATABASE_ROUTERS and GAZETTEER_DB_ALIAS settings in your settings file
+and modify the default values if necessary - but re-escape them before
+running unit tests""")
     sh("django-admin.py migrate --settings=geonode.settings --noinput")
 
 
@@ -362,7 +368,6 @@ def package_webapp(options):
     sh("django-admin.py collectstatic -v0 --settings=geonode.settings --noinput")
 
     """Package (Python, Django) web application and dependencies."""
-    
     sh('python setup.py egg_info sdist')
 
     req_file = path(os.getcwd()) / options.deploy.req_file
@@ -725,7 +730,7 @@ def host(options):
         time.sleep(2)
 
     try:
-        #sh("django-admin.py updatelayers --settings=geonode.settings")
+        sh("django-admin.py updatelayers --settings=geonode.settings")
 
         info("Development GeoNode is running at http://" + options.host.bind + ":8000/")
         info("The GeoNode is an unstoppable machine")
@@ -847,4 +852,3 @@ def _zip_extract_member(zf, member, targetpath, pwd):
     target.close()
 
     return targetpath
-

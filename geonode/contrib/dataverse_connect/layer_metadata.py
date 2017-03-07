@@ -55,7 +55,7 @@ class LayerMetadata:
     # Used to initialize this class
     METADATA_ATTRIBUTES = WorldMapToGeoconnectMapLayerMetadataValidationForm.base_fields.keys()
 
-    
+
     def __init__(self, geonode_layer_object):
         """
 
@@ -84,20 +84,25 @@ class LayerMetadata:
 
 
     def get_metadata_dict(self, as_json=False):
-        
+
         params = {}
         for attr in self.METADATA_ATTRIBUTES:
             params[attr] = self.__dict__.get(attr, None)
 
         f = WorldMapToGeoconnectMapLayerMetadataValidationForm(params)
         if not f.is_valid():
-            raise forms.ValidationError('Validation failed for the WorldMapToGeoconnectMapLayerMetadataValidationForm.  \nErrors: %s' % f.errors)
+            err_msg = ('Validation failed for the '
+                    'WorldMapToGeoconnectMapLayerMetadataValidationForm. '
+                    '\nErrors: %s' % f.errors)
+            raise forms.ValidationError(err_msg)
 
+        '''
         print '-'
         for k, v in params.items():
             print '%s: (%s)' % (k, v)
         print '-'
-
+        '''
+        
         if as_json:
             try:
                 return json.dumps(params)
@@ -110,7 +115,7 @@ class LayerMetadata:
     def get_attribute_metadata(self, layer_obj):
         """
         Format metadata about a layer's attributes/fields
-        
+
         [ {"name": "STATE", "display_name"="State", "type": "String"}\
         , {"name": "UniqueID", "display_name"="UniqueID", "type": "Double"}\
         etc.
@@ -128,7 +133,7 @@ class LayerMetadata:
         except:
             raise ValueError('JSON dump failed for attribute info')
 
-        
+
     def update_metadata_with_layer_object(self, layer_obj):
         if not type(layer_obj) is Layer:
             return False
@@ -161,16 +166,21 @@ class LayerMetadata:
     def format_download_links(self, layer_obj):
         assert type(layer_obj) is Layer, "layer_obj must be type Layer"
 
+        if not hasattr(layer_obj, 'resource'):
+            return None
+        if not hasattr(layer_obj.resource, 'resource_type'):
+            return None
+
         link_tuples = layer_obj.download_links()
         if not link_tuples:
-            return ''
+            return None
 
         link_dict = {}
         for lt in link_tuples:
             if lt and len(lt)==3:
                 link_dict[lt[0]] = lt[2]
         if len(link_dict) == 0:
-            return ''
+            return None
 
         return link_dict
         #try:

@@ -1,4 +1,5 @@
-from geonode.maps.models import Map, Layer, MapLayer, LayerCategory, LayerAttribute, Contact, ContactRole, Role, MapStats, LayerStats
+from geonode.maps.models import (Map, Layer, MapLayer, LayerCategory, LayerAttribute,
+    Contact, ContactRole, Role, MapStats, LayerStats, Endpoint, MapSnapshot)
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import admin
 from django.http import HttpResponseRedirect
@@ -34,12 +35,18 @@ class ContactRoleAdmin(admin.ModelAdmin):
     search_fields = ['contact__name','layer__name']
     form = autocomplete_light.modelform_factory(ContactRole)
 
+def remove_map_owners(modeladmin, request, queryset):
+    ids = queryset.all().values_list('id', flat=True)
+    return HttpResponseRedirect("/users_remove/?ids=%s" % ','.join(str(id) for id in ids))
+remove_map_owners.short_description = "Remove the owners of the selected maps"
+
 class MapAdmin(admin.ModelAdmin):
     inlines = [MapLayerInline,MapOverallRatingInline,MapRatingInline]
     list_display = ('id', 'title','owner','created_dttm', 'last_modified')
     list_filter  = ('created_dttm','owner')
     date_hierarchy = 'created_dttm'
     search_fields = ['title','keywords__name']
+    actions = [remove_map_owners]
     ordering = ('-created_dttm',)
     form = autocomplete_light.modelform_factory(Map)
 
@@ -49,7 +56,7 @@ class ContactAdmin(admin.ModelAdmin):
     form = autocomplete_light.modelform_factory(Contact)
 
 class LayerAdmin(admin.ModelAdmin):
-    list_display = ('id','title', 'date', 'owner', 'topic_category', 'add_as_join_target')
+    list_display = ('id','title', 'store', 'name', 'date', 'owner', 'topic_category', 'add_as_join_target')
     list_display_links = ('id',)
     list_editable = ('title', 'topic_category')
     list_filter  = ('date', 'date_type', 'constraints_use', 'topic_category', 'owner')
@@ -84,7 +91,15 @@ class MapStatsAdmin(admin.ModelAdmin):
 class LayerStatsAdmin(admin.ModelAdmin):
     list_display = ('layer','visits', 'uniques','downloads','last_modified')
 
+class EndpointAdmin(admin.ModelAdmin):
+    list_display = ('id', 'description', 'owner', 'url')
+    list_display_links = ('id',)
+    search_fields = ['description', 'url']
 
+class MapSnapshotAdmin(admin.ModelAdmin):
+    list_display = ('map', 'created_dttm', 'url')
+    search_fields = ['map__title',]
+    date_hierarchy = 'created_dttm'
 
 
 admin.site.register(Map, MapAdmin)
@@ -97,4 +112,5 @@ admin.site.register(MapLayer,MapLayerAdmin)
 admin.site.register(Role)
 admin.site.register(MapStats, MapStatsAdmin)
 admin.site.register(LayerStats, LayerStatsAdmin)
-#admin.site.register(Comment, CommentAdmin)
+admin.site.register(Endpoint, EndpointAdmin)
+admin.site.register(MapSnapshot, MapSnapshotAdmin)

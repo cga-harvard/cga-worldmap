@@ -1,6 +1,6 @@
 --extra-index-url=http://dist.pinaxproject.com/dev
 
-pip==1.0
+pip
 setuptools
 paver
 
@@ -30,7 +30,7 @@ django-profiles==0.2
 geonode-avatar==2.1.1
 dialogos==0.1
 agon-ratings==0.2
-South==0.7.3
+South==1.0.2
 django-taggit==0.9.3
 ordereddict
 simplejson
@@ -42,11 +42,12 @@ defusedxml
 #The following are for the gazetteer
 -e git+https://github.com/cga-harvard/geopy.git#egg=geopy
 geojson
-https://bitbucket.org/jespern/django-piston/get/5b3ef294fe89.zip
+dicttoxml==1.6.6
 #Uncomment the following to use the django debug toolbar
--e git+https://github.com/robhudson/django-debug-toolbar.git#egg=django-debug-toolbar
+#-e git+https://github.com/robhudson/django-debug-toolbar.git#egg=django-debug-toolbar
 
 #For scheduled tasks
+celery==3.1.18
 django-celery==3.0.11
 django-kombu==0.9.4
 pytz
@@ -59,12 +60,15 @@ vectorformats
 #For autocomplete
 django-autocomplete-light==1.4.5
 
+# for new api
+django-tastypie==0.9.16
+
 # --------------------------------------------------
 # For the Dataverse/Geoconnect/WorldMap connection
 # --------------------------------------------------
 xmltodict
-#shared_dataverse_information==0.4.1
--e git+https://github.com/IQSS/shared-dataverse-information.git#egg=shared-dataverse-information
+shared_dataverse_information>=0.4.8
+#-e git+https://github.com/IQSS/shared-dataverse-information.git#egg=shared-dataverse-information
 
 # --------------------------------------------------
 # For Datatable app.  Tabular table joins to existing layers

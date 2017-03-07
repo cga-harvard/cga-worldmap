@@ -16,6 +16,7 @@ from django.conf import settings
 from django.template import RequestContext, loader
 from django.utils.translation import ugettext as _
 from django.utils import simplejson as json
+from django.views.generic.simple import direct_to_template
 from django.template.defaultfilters import slugify
 
 import math
@@ -31,6 +32,7 @@ import logging
 from geonode.flexidates import FlexiDateFormField
 import taggit
 from geonode.maps.utils import forward_mercator
+from geonode.maps.utils import get_db_store_name
 from geonode.maps.owslib_csw import CswRecord
 from django.utils.html import escape, strip_tags
 from django.forms.models import inlineformset_factory
@@ -48,6 +50,9 @@ from geonode.maps.encode import num_encode, num_decode
 from django.db import transaction
 import autocomplete_light
 from geonode.maps.encode import despam, XssCleaner
+from geonode.actions.models import Action
+
+from .forms import EndpointForm
 
 logger = logging.getLogger("geonode.maps.views")
 
@@ -91,14 +96,14 @@ def bbox_to_wkt(x0, x1, y0, y1, srid="4326"):
 
 class GazetteerForm(forms.Form):
 
-    project = forms.CharField(label=_('Project'), max_length=128, required=False)
-    startDate = forms.ModelChoiceField(label = _("Start Date attribute"),
+    project = forms.CharField(label=_('Custom Gazetteer Name (Project Name)'), max_length=128, required=False)
+    startDate = forms.ModelChoiceField(label = _("Start depict-date field"),
         required=False,
         queryset = LayerAttribute.objects.none())
 
     startDateFormat = forms.CharField(label=_("Date format"), max_length=256, required=False)
 
-    endDate = forms.ModelChoiceField(label = _("End Date attribute"),
+    endDate = forms.ModelChoiceField(label = _("End depict-date field"),
         required=False,
         queryset = LayerAttribute.objects.none())
 
@@ -122,7 +127,7 @@ class LayerContactForm(forms.Form):
 
 class LayerForm(forms.ModelForm):
     from geonode.maps.models import CONSTRAINT_OPTIONS
-    CONSTRAINT_HELP = _('''<p>Please choose the appropriate type of restriction (if any) for the use of your data. 
+    CONSTRAINT_HELP = _('''<p>Please choose the appropriate type of restriction (if any) for the use of your data.
     Then use the "Constraints Other" form below to provide any necessary details.</p>
     <p>
     Public Domain Dedication and License<br />
@@ -140,7 +145,7 @@ class LayerForm(forms.ModelForm):
     CC-BY-SA<br />
     http://creativecommons.org/licenses/by-sa/2.0/
     ''')
-    
+
     map_id = forms.CharField(widget=forms.HiddenInput(), initial='', required=False)
     date = forms.DateTimeField(label='*' + (_('Date')), widget=forms.SplitDateTimeWidget)
     date.widget.widgets[0].attrs = {"class":"date"}
@@ -149,7 +154,7 @@ class LayerForm(forms.ModelForm):
     temporal_extent_end = FlexiDateFormField(required=False,label= _('Temporal Extent End Date'))
     title = forms.CharField(label = '*' + _('Title'), max_length=255)
     abstract = forms.CharField(label = '*' + _('Abstract'), widget=forms.Textarea(attrs={'cols': 60}))
-    constraints_use = forms.ChoiceField(label= _('Contraints'), choices=CONSTRAINT_OPTIONS, 
+    constraints_use = forms.ChoiceField(label= _('Contraints'), choices=CONSTRAINT_OPTIONS,
                                         help_text=CONSTRAINT_HELP)
     keywords = taggit.forms.TagField(required=False)
     class Meta:
@@ -202,12 +207,23 @@ def maps(request): # , mapid=None):
                 status=401
             )
         else:
+            # create a new map
             map_obj = Map(owner=request.user, zoom=0, center_x=0, center_y=0)
             map_obj.save()
             map_obj.set_default_permissions()
             try:
                 map_obj.update_from_viewer(request.raw_post_data)
                 MapSnapshot.objects.create(config=clean_config(request.raw_post_data),map=map_obj,user=request.user)
+
+                # audit action
+                username = request.user.get_profile().username()
+                action = Action(
+                    action_type='map_create',
+                    description='User %s created map titled "%s"' % (username, map_obj.title),
+                    args=map_obj.id,
+                )
+                action.save()
+
             except ValueError, e:
                 return HttpResponse(str(e), status=400)
             else:
@@ -315,7 +331,7 @@ def newmap_config(request):
 
             config = map_obj.viewer_json(request.user, *(DEFAULT_BASE_LAYERS + layers))
             config['map']['groups'] = []
-            for group in groups:             
+            for group in groups:
                 if group not in json.dumps(config['map']['groups']):
                     config['map']['groups'].append({"expanded":"true", "group":group})
 
@@ -638,10 +654,21 @@ def deletemap(request, mapid):
             'urlsuffix': get_suffix_if_custom(map_obj)
         }))
     elif request.method == 'POST':
+        map_id = map_obj.id
+        map_title = map_obj.title
+        username = request.user.get_profile().username()
         layers = map_obj.layer_set.all()
         for layer in layers:
             layer.delete()
         map_obj.delete()
+
+        # audit action
+        action = Action(
+            action_type='map_delete',
+            description='User %s deleted map titled "%s"' % (username, map_title),
+            args=map_id,
+        )
+        action.save()
 
         return HttpResponseRedirect(request.user.get_profile().get_absolute_url())
 
@@ -653,7 +680,7 @@ def mapdetail(request,mapid):
     if not request.user.has_perm('maps.view_map', obj=map_obj):
         return HttpResponse(loader.render_to_string('401.html',
             RequestContext(request, {'error_message':
-                _("You are not allowed to view this map.")})), status=401)    
+                _("You are not allowed to view this map.")})), status=401)
     config = map_obj.viewer_json(request.user)
     config = json.dumps(config)
     layers = MapLayer.objects.filter(map=map_obj.id)
@@ -748,7 +775,7 @@ def additional_layers(request, map_obj, layerlist):
         group = layer.topic_category.title if layer.topic_category else "General"
         if group not in groups:
             groups.add(group)
-                
+
         layers.append(MapLayer(
                     map = map_obj,
                     name = layer.typename,
@@ -758,7 +785,7 @@ def additional_layers(request, map_obj, layerlist):
                     group=group,
                     source_params = u'{"ptype": "gxp_gnsource"}',
                     layer_params= u'{"tiled":true, "title":" '+ layer.title + '", "format":"image/png","queryable":true}')
-                )    
+                )
     return layers, groups, bbox
 
 def view(request, mapid, snapshot=None):
@@ -787,6 +814,12 @@ def view(request, mapid, snapshot=None):
     else:
         config = snapshot_config(snapshot, map_obj, request.user)
 
+    for layer in config['map']['layers']:
+        if 'local' in layer:
+            if 'styles' in layer:
+                if layer['styles'] is None:
+                    logger.info('fixing style for layer %s' % layer['name'])
+                    layer['styles'] = ''
 
     first_visit = True
     if request.session.get('visit' + str(map_obj.id), False):
@@ -808,11 +841,11 @@ def view(request, mapid, snapshot=None):
     config['uid'] = request.user.id
     config['edit_map'] = request.user.has_perm('maps.change_map', obj=map_obj)
     config['topic_categories'] = category_list()
-    
+
     template_page = 'maps/view.html'
     if map_obj.template_page:
         template_page = map_obj.template_page
-    
+
     return render_to_response(template_page, RequestContext(request, {
         'config': json.dumps(config),
         'GOOGLE_API_KEY' : settings.GOOGLE_API_KEY,
@@ -860,7 +893,7 @@ def tweetview(request):
         testUrl = settings.SITEURL  + "tweetserver/" +  geops_ip  + "/?REQUEST%3DGetFeatureInfo%26SQL%3Dselect%20min(time)%2Cmax(time)%20from%20tweets"
         #testUrl = "http://worldmap.harvard.edu"
         resp, content = conn.request(testUrl, 'GET')
-        timerange = json.loads(content)  
+        timerange = json.loads(content)
     except:
         timerange = None
         redirectPage = "maps/tweetstartup.html"
@@ -893,14 +926,14 @@ def embed(request, mapid=None, snapshot=None):
         else:
             config = snapshot_config(snapshot, map_obj, request.user)
         config['first_visit'] = False
-        
+
     return render_to_response('maps/embed.html', RequestContext(request, {
         'config': json.dumps(config)
     }))
 
 
 def printmap(request, mapid=None, snapshot=None):
-        
+
     return render_to_response('maps/map_print.html', RequestContext(request, {}))
 
 def data(request):
@@ -932,7 +965,12 @@ def layer_metadata(request, layername):
 
         topic_category = layer.topic_category
         layerAttSet = inlineformset_factory(Layer, LayerAttribute, extra=0, form=LayerAttributeForm, )
-        show_gazetteer_form = request.user.is_superuser and layer.store == settings.DB_DATASTORE_NAME
+
+        # hack needed to see if the layer is in Postgres (otherwise no gazetteer):
+        # all PostGIS stores starts with wm. There is also a dataverse postgres database
+        show_gazetteer_form = settings.USE_GAZETTEER
+        if layer.store[:2] != 'wm' and layer.store != 'dataverse':
+            show_gazetteer_form = False
 
         fieldTypes = {}
         attributeOptions = layer.attribute_set.filter(attribute_type__in=['xsd:dateTime','xsd:date','xsd:int','xsd:string','xsd:bigint', 'xsd:double'])
@@ -982,9 +1020,8 @@ def layer_metadata(request, layername):
             if "tab" in request.POST:
                 tab = request.POST["tab"]
 
-
-
-            if layer_form.is_valid() and category_form.is_valid() and (not request.user.is_superuser or gazetteer_form.is_valid()):
+            if layer_form.is_valid() and category_form.is_valid() and (
+                    not settings.USE_GAZETTEER or gazetteer_form.is_valid()):
 
                 new_category = LayerCategory.objects.get(id=category_form.cleaned_data['category_choice_field'])
 
@@ -995,7 +1032,7 @@ def layer_metadata(request, layername):
                         la.searchable = form["searchable"]
                         la.visible = form["visible"]
                         la.display_order = form["display_order"]
-                        if (request.user.is_superuser and gazetteer_form.is_valid()):
+                        if settings.USE_GAZETTEER and gazetteer_form.is_valid():
                             la.in_gazetteer = form["in_gazetteer"]
                             la.is_gaz_start_date = (la == gazetteer_form.cleaned_data["startDate"])
                             la.is_gaz_end_date = (la == gazetteer_form.cleaned_data["endDate"])
@@ -1020,7 +1057,7 @@ def layer_metadata(request, layername):
                 the_layer.keywords.clear()
                 the_layer.keywords.add(*new_keywords)
 
-                if request.user.is_superuser and gazetteer_form.is_valid():
+                if settings.USE_GAZETTEER and gazetteer_form.is_valid():
                     the_layer.in_gazetteer = "gazetteer_include" in request.POST
                     if the_layer.in_gazetteer:
                         the_layer.gazetteer_project = gazetteer_form.cleaned_data["project"]
@@ -1115,7 +1152,19 @@ def layer_remove(request, layername):
                 "lastmapTitle" : request.session.get("lastmapTitle")
             }))
         if (request.method == 'POST'):
+            layer_title = layer.title
+            layer_uuid = layer.uuid
             layer.delete()
+
+            # audit action
+            username = request.user.get_profile().username()
+            action = Action(
+                action_type='layer_delete',
+                description='User %s deleted layer titled "%s"' % (username, layer_title),
+                args=layer_uuid,
+            )
+            action.save()
+
             return HttpResponseRedirect(request.user.get_profile().get_absolute_url())
         else:
             return HttpResponse("Not allowed",status=403)
@@ -1163,8 +1212,6 @@ def layer_detail(request, layername):
             RequestContext(request, {'error_message':
                 _("You are not permitted to view this layer")})), status=401)
 
-    metadata = layer.metadata_csw()
-    
     print '-' * 40
     print '\nlayer.typename', layer.typename
     print 'settings.GEOSERVER_BASE_URL', settings.GEOSERVER_BASE_URL
@@ -1172,7 +1219,12 @@ def layer_detail(request, layername):
     print 'layer.title', layer.title
     print 'layer.attribute_config()', layer.attribute_config(), '\n'
     print '-' * 40
-    maplayer = MapLayer(name = layer.typename, styles=[layer.default_style.name], source_params = '{"ptype": "gxp_gnsource"}', ows_url = settings.GEOSERVER_BASE_URL + "wms",  layer_params= '{"tiled":true, "title":" '+ layer.title + '", ' + json.dumps(layer.attribute_config()) + '}')
+    maplayer = MapLayer(
+        name = layer.typename,
+        styles=[layer.default_style.name],
+        source_params = '{"ptype": "gxp_gnsource"}',
+        ows_url = settings.GEOSERVER_BASE_URL + "wms",
+        layer_params= '{"tiled":true, "local":true, "title":" '+ layer.title + '", ' + json.dumps(layer.attribute_config()) + '}')
 
     # center/zoom don't matter; the viewer will center on the layer bounds
     map_obj = Map(projection="EPSG:900913")
@@ -1180,11 +1232,13 @@ def layer_detail(request, layername):
 
     layerstats,created = LayerStats.objects.get_or_create(layer=layer)
 
+    added_layers = (DEFAULT_BASE_LAYERS + [maplayer])
+    viewer = json.dumps(map_obj.viewer_json(request.user, * added_layers))
+
     return render_to_response('maps/layer.html', RequestContext(request, {
         "layer": layer,
-        "metadata": metadata,
         "layerstats": layerstats,
-        "viewer": json.dumps(map_obj.viewer_json(request.user, * (DEFAULT_BASE_LAYERS + [maplayer]))),
+        "viewer": viewer,
         "permissions_json": _perms_info_email_json(layer, LAYER_LEV_NAMES),
         "customGroup": settings.CUSTOM_GROUP_NAME if settings.USE_CUSTOM_ORG_AUTHORIZATION else '',
         "GEOSERVER_BASE_URL": settings.GEOSERVER_BASE_URL,
@@ -1241,6 +1295,16 @@ def upload_layer(request):
                         charset = request.POST.get('charset'),
                         sldfile = sld_file
                         )
+
+                # audit action
+                username = request.user.get_profile().username()
+                action = Action(
+                    action_type='layer_upload',
+                    description='User %s uploaded layer titled "%s"' % (username, saved_layer.title),
+                    args=saved_layer.uuid,
+                )
+                action.save()
+
                 redirect_to  = reverse('data_metadata', args=[saved_layer.typename])
                 if 'mapid' in request.POST and request.POST['mapid'] == 'tab':
                     redirect_to+= "?tab=worldmap_update_panel"
@@ -1497,6 +1561,7 @@ def layer_acls(request):
     # is not present in django.
     logger.info("WTF is this still used?")
     acl_user = request.user
+
     if 'HTTP_AUTHORIZATION' in request.META:
         try:
             username, password = _get_basic_auth_info(request)
@@ -1662,7 +1727,7 @@ def metadata_search(request):
 
     result = _metadata_search(query, start, limit, sortby, sortorder, **advanced)
 
-    # XXX slowdown here to dig out result permissions
+    # slowdown here to dig out result permissions and other info from GeoNode
     for doc in result['rows']:
         try:
             layer = Layer.objects.get(uuid=doc['uuid'])
@@ -1673,6 +1738,15 @@ def metadata_search(request):
                 'delete': request.user.has_perm('maps.delete_layer', obj=layer),
                 'change_permissions': request.user.has_perm('maps.change_layer_permissions', obj=layer),
             }
+            if layer.topic_category:
+                doc['topic_category'] = layer.topic_category.title
+            if layer.owner:
+                doc['owner_username'] = layer.owner.username
+            if layer.temporal_extent_start:
+                doc['temporal_extent_start'] = layer.temporal_extent_start
+            if layer.temporal_extent_end:
+                doc['temporal_extent_end'] = layer.temporal_extent_end
+
         except Layer.DoesNotExist:
             doc['_local'] = False
             pass
@@ -2360,9 +2434,9 @@ def addlayers(request):
 
 def addLayerJSON(request):
     logger.debug("Enter addLayerJSON")
-    layername = request.POST.get('layername', False)
+    layername = request.GET.get('layername', False)
     logger.debug("layername is [%s]", layername)
-    
+
     if layername:
         try:
             layer = Layer.objects.get(typename=layername)
@@ -2677,6 +2751,7 @@ def map_share(request,mapid):
 
 @login_required
 def create_pg_layer(request):
+    db_store_name = get_db_store_name(request.user)
     if request.method == 'GET':
         layer_form = LayerCreateForm(prefix="layer")
 
@@ -2704,9 +2779,9 @@ def create_pg_layer(request):
                 return HttpResponse(msg, status='400')
 
             # Assume datastore used for PostGIS
-            store = settings.DB_DATASTORE_NAME
+            store = db_store_name
             if store is None:
-                msg = 'Specified store [%s] not found' % settings.DB_DATASTORE_NAME
+                msg = 'Specified store [%s] not found' % db_store_name
                 return HttpResponse(msg, status='400')
 
             #TODO: Let users create their own schema
@@ -2731,7 +2806,7 @@ def create_pg_layer(request):
             try:
                 logger.info("Create layer %s", name)
                 layer = cat.create_native_layer(settings.DEFAULT_WORKSPACE,
-                                          settings.DB_DATASTORE_NAME,
+                                          db_store_name,
                                           name,
                                           name,
                                           escape(layer_form.cleaned_data['title']),
@@ -2749,8 +2824,17 @@ def create_pg_layer(request):
                 check_projection(name, layer)
 
                 logger.info("Create django record")
-                geonodeLayer = create_django_record(request.user, layer_form.cleaned_data['title'], layer_form.cleaned_data['keywords'].strip().split(" "), layer_form.cleaned_data['abstract'], layer, permissions)
+                title = layer_form.cleaned_data['title']
+                geonodeLayer = create_django_record(request.user, title, layer_form.cleaned_data['keywords'].strip().split(" "), layer_form.cleaned_data['abstract'], layer, permissions)
 
+                # audit action
+                username = request.user.get_profile().username()
+                action = Action(
+                    action_type='layer_create',
+                    description='User %s created layer titled "%s"' % (username, title),
+                    args=geonodeLayer.uuid,
+                )
+                action.save()
 
                 redirect_to  = reverse('data_metadata', args=[geonodeLayer.typename])
                 if 'mapid' in request.POST and request.POST['mapid'] == 'tab': #if mapid = tab then open metadata form in tabbed panel
@@ -2878,7 +2962,7 @@ def mobilemap(request, mapid=None, snapshot=None):
         else:
             request.session['visit_mobile' + str(map_obj.id)] = True
         config['first_visit_mobile'] = first_visit_mobile
-        
+
     return render_to_response('maps/mobilemap.html', RequestContext(request, {
         'config': json.dumps(config),
         'GOOGLE_API_KEY' : settings.GOOGLE_API_KEY,
@@ -2888,3 +2972,57 @@ def mobilemap(request, mapid=None, snapshot=None):
         'maptitle': map_obj.title,
         'urlsuffix': get_suffix_if_custom(map_obj),
     }))
+
+
+@login_required
+def users_remove(request):
+    # delete multiple user from admin map page action
+    users = []
+    ids = ''
+    if 'ids' in request.GET:
+        ids = request.GET['ids']
+    else:
+        ids = request.POST['ids']
+    maps = Map.objects.filter(id__in=ids.split(','))
+    for map in maps:
+        if map.owner not in users:
+            users.append(map.owner)
+    if request.method == 'GET':
+        return render_to_response("maps/users_remove.html", RequestContext(request, {
+            'users': users,
+            'ids': ids,
+        }))
+    if request.method == 'POST':
+        for user in users:
+            print 'Removing user %s' % user.username
+            user.delete()
+        return HttpResponseRedirect(reverse('admin:maps_map_changelist'))
+
+@login_required
+def add_endpoint(request):
+    """
+    Let the user to add an endpoint for a remote service.
+    """
+    if request.method == 'POST':
+        endpoint_form = EndpointForm(request.POST)
+        if endpoint_form.is_valid():
+            endpoint = endpoint_form.save(commit=False)
+            endpoint.owner = request.user
+            endpoint.save()
+            return direct_to_template(
+                request,
+                'maps/endpoint_added.html', {
+                    "endpoint": endpoint,
+                }
+            )
+        else:
+            logger.info('Error posting an endpoint')
+    else:
+        endpoint_form = EndpointForm()
+
+    return render_to_response(
+        'maps/endpoint_add.html',
+        RequestContext(request, {
+            "form": endpoint_form,
+        })
+    )

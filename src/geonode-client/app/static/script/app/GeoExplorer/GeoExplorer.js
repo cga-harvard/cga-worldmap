@@ -89,12 +89,6 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
     toolbar: null,
 
     /**
-     * Property: capGrid
-     * {<Ext.Window>} A window which includes a CapabilitiesGrid panel.
-     */
-    capGrid: null,
-
-    /**
      * Property: modified
      * ``Number``
      */
@@ -130,9 +124,6 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
     arcGisRestLabel: 'UT: Add ArcGIS REST Server',
     areaActionText: "UT:Area",
     backgroundContainerText: "UT:Background",
-    capGridAddLayersText: "UT:Add Layers",
-    capGridDoneText: "UT:Done",
-    capGridText: "UT:Available Layers",
     connErrorTitleText: "UT:Connection Error",
     connErrorText: "UT:The server returned an error",
     connErrorDetailsText: "UT:Details...",
@@ -215,13 +206,16 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
     picasaText: 'Picasa',
     youTubeText: 'YouTube',
     hglText: "Harvard Geospatial Library",
-    moreText: 'More...',
     uploadLayerText: 'Upload Layer',
     createLayerText: 'Create Layer',
     rectifyLayerText: 'Rectify Layer',
-    worldmapDataText: 'WorldMap Data',
+    submitendpointText: 'Submit a Map Service',
+    worldmapDataText: 'Search',
     externalDataText: 'External Data',
     leavePageWarningText: 'If you leave this page, unsaved changes will be lost.',
+
+    mapproxy_backend: 'http://hh.worldmap.harvard.edu',
+    //mapproxy_backend: 'http://192.168.33.15:8001',
 
     constructor: function(config) {
         this.config = config;
@@ -259,13 +253,19 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
                 // use django's /geoserver endpoint when talking to the local
                 // GeoServer's RESTconfig API
                 var url = options.url.replace(this.urlPortRegEx, "$1/");
+                // strip from urls http or https
+                url_short = url.replace(/.*?:\/\//g, "");
+                localGeoServerBaseUrl_short = this.localGeoServerBaseUrl.replace(/.*?:\/\//g, "");
+                console.log('url_short: ' + url_short);
+                console.log('localGeoServerBaseUrl_short: ' + localGeoServerBaseUrl_short);
                 if (this.localGeoServerBaseUrl) {
-                    if (url.indexOf(this.localGeoServerBaseUrl) == 0) {
+                    if (url_short.indexOf(localGeoServerBaseUrl_short) == 0) {
                         // replace local GeoServer url with /geoserver/
                         options.url = url.replace(
                             new RegExp("^" + this.localGeoServerBaseUrl),
                             "/geoserver/"
                         );
+                        console.log('Request sent to GeoServer');
                         return;
                     }
                     var localUrl = this.localGeoServerBaseUrl.replace(
@@ -273,12 +273,14 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
                     if (url.indexOf(localUrl + "rest/") === 0) {
                         options.url = url.replace(new RegExp("^" +
                             localUrl), "/geoserver/");
+                        console.log('Request sent to GeoServer REST');
                         return;
                     }
                 }
                 // use the proxy for all non-local requests
                 if(this.proxy && options.url.indexOf(this.proxy) !== 0 &&
                     options.url.indexOf("http") === 0) {
+                    console.log('Request sent to proxy');
                     var parts = options.url.replace(/&$/, "").split("?");
                     var params = Ext.apply(parts[1] && Ext.urlDecode(
                         parts[1]) || {}, options.params);
@@ -799,7 +801,6 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
 
         var addLayerButton = new Ext.Button({
             id: "worldmap_addlayers_button",
-            tooltip : this.addLayersButtonText,
             disabled: false,
             text: '<span class="x-btn-text">' + this.addLayersButtonText + '</span>',
             handler : this.showSearchWindow,
@@ -1063,7 +1064,22 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
             this.setWorldMapSourceKey();
         var wmSource = this.layerSources[this.worldMapSourceKey];
         if (wmSource) {
-            this.addLayerAjax(wmSource, this.worldMapSourceKey, records);
+            for (var i = 0; i < records.length; i++) {
+                var record = records[i];
+                // add an existing layers
+                if ('uuid' in record.data){
+                    if (record.data['service_type'] == 'Hypermap:WorldMap'){
+                        this.addLayerAjax(wmSource, this.worldMapSourceKey, record);
+                    } else {
+                        url = 'http://hh.worldmap.harvard.edu/registry/hypermap/layer/' + record.data['uuid'] + '/map/wmts/' + record.data['name'] + '/default_grid/${z}/${x}/${y}.png';
+                        var hhSource = this.addLayerSource({"config":{"url":url, "ptype":"gxp_gnsource"}});
+                        this.addLayerAjax(hhSource, hhSource.id, record);
+                    }
+                } else {
+                    // newly uploaded and created layers
+                    this.addLayerAjax(wmSource, this.worldMapSourceKey, record);
+                }
+            }
         }
     },
 
@@ -1077,103 +1093,234 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
             new OpenLayers.Projection("EPSG:4326");
     },
 
-    addLayerAjax: function (dataSource, dataKey, dataRecords) {
-        var geoEx = this;
-        var key = dataKey;
-        var records = dataRecords;
-        var source = dataSource;
+    /**
+    Add a layer to the Map.
+    Creates an instance for any existing WM layer or any Registry layer for being added to the map.
+    */
+    addLocalLayer: function(thisRecord, source, layerStore, key){
+        //Get all the required WMS parameters from the GeoNode/Worldmap database
+        // instead of GetCapabilities
 
-        var layerStore = this.mapPanel.layers;
-        var isLocal = source instanceof gxp.plugins.GeoNodeSource &&
-            source.url.replace(this.urlPortRegEx, "$1/").indexOf(
-                this.localGeoServerBaseUrl.replace(
-                    this.urlPortRegEx, "$1/")) === 0;
-        for (var i = 0, ii = records.length; i < ii; ++i) {
-            var thisRecord = records[i];
-            if (isLocal) {
-                //Get all the required WMS parameters from the GeoNode/Worldmap database
-                // instead of GetCapabilities
-                var layer = records[i].get("name");
-                var tiled = records[i].get("tiled");
+        var typename = this.searchTable.getlayerTypename(thisRecord);
+        var tiled = thisRecord.get("tiled") || true;
 
+        var layer_bbox = [
+            parseFloat(thisRecord.get('min_x')),
+            parseFloat(thisRecord.get('min_y')),
+            parseFloat(thisRecord.get('max_x')),
+            parseFloat(thisRecord.get('max_y'))
+            ];
 
-                Ext.Ajax.request({
-                    url: "/maps/addgeonodelayer/?" + thisRecord.get("name"),
-                    method: "POST",
-                    params: {layername:thisRecord.get("name")},
+        var layer_detail_url = this.mapproxy_backend + '/registry/hypermap/layer/' + thisRecord.get('uuid') + '/';
 
-                    success: function(result, request) {
-                        var jsonData = Ext.util.JSON.decode(result.responseText);
-                        layer = jsonData.layer;
-                        layer.source = key;
-                        layer.buffer = 0;
-                        layer.tiled = true;
-                        //console.log('BBOX:' + layer.llbbox);
-                        var record = source.createLayerRecord(layer);
-                        record.selected = true;
-                        //console.log('Created record');
-                        ////console.log('GROUP:' + record.get("group"));
-                        if (record) {
-                            if (record.get("group") === "background") {
-                                var pos = layerStore.queryBy(
-                                    function(rec) {
-                                        return rec.get("group") === "background"
-                                    }).getCount();
-                                layerStore.insert(pos, [record]);
+        var layer = {
+            "styles": "",
+            "group": "General",
+            "name": thisRecord.get('name'),
+            "title": thisRecord.get('title'),
+            "url": layer_detail_url + 'map/wmts/' + typename.replace('geonode:', '') + '/default_grid/${z}/${x}/${y}.png',
+            "abstract": thisRecord.get('abstract'),
+            "visibility": true,
+            "queryable": true,
+            "disabled": false,
+            "srs": thisRecord.get('srs'),
+            "bbox": layer_bbox,
+            "transparent": true,
+            "llbbox": layer_bbox,
+            "source": key,
+            "buffer": 0,
+            "tiled": true,
+            "local": thisRecord.get('service_type') === 'Hypermap:WorldMap'
+        };
 
-                            } else {
-                                category = record.get("group");
-                                if (!category || category == '')
-                                    record.set("group", "General");
+        if (thisRecord.get('service_type') === 'Hypermap:WorldMap'){
+            layer_detail_url = 'http://worldmap.harvard.edu/data/' + thisRecord.get('name');
+        };
 
-                                geoEx.layerTree.addCategoryFolder({"group":record.get("group")}, true);
-                                layerStore.add([record]);
+        if(layer.local){
+            // url is always the generic GeoServer endpoint for WM layers
+            layer.url = this.localGeoServerBaseUrl + 'wms';
+        };
 
-
-                                //geoEx.reorderNodes(record.getLayer());
-                                geoEx.layerTree.overlayRoot.findDescendant("layer", record.getLayer()).select();
-                            }
-
-
-                        }
-                    },
-                    failure: function(result, request) {
-                        //No permission to view
-                    }
-
-                });
-            } else {
-                //Not a local GeoNode layer, use source's standard method for creating the layer.
-                var layer = records[i].get("name");
-                var record = source.createLayerRecord({
-                    name: layer,
-                    source: key,
-                    buffer: 0
-                });
-                //alert(layer + " created after FAIL");
-                if (record) {
-                    if (record.get("group") === "background") {
-                        var pos = layerStore.queryBy(
-                            function(rec) {
-                                return rec.get("group") === "background"
-                            }).getCount();
-                        layerStore.insert(pos, [record]);
-                    } else {
-                        category = "General";
-                        record.set("group", category);
-
-                        geoEx.layerTree.addCategoryFolder({"group":record.get("group")}, true);
-                        layerStore.add([record]);
-                    }
-                }
+        if(thisRecord.get('ServiceType') === 'ESRI:ArcGIS:ImageServer' || thisRecord.get('ServiceType') === 'ESRI:ArcGIS:MapServer'){
+            layer.url = thisRecord.get('url');
+            layer.name = thisRecord.get('title');
+            if (layer.srs == null){
+              //Assume that the bbox needs to be transformed to web mercator
+              //delete layer.bbox;
+              layer_bbox = [thisRecord.get('min_x'),thisRecord.get('min_y'),thisRecord.get('max_x'),thisRecord.get('max_y')];
+              layer.bbox = new OpenLayers.Bounds(layer_bbox).transform("EPSG:4326", this.map.projection).toArray();
             }
-            this.searchWindow.hide();
-
-
+            this.addEsriSourceAndLayer(layerStore, layer, layer_detail_url);
+        }else{
+            this.loadRecord(source, layerStore, layer, layer_detail_url);
         }
     },
 
+    /**
+    * Check if the user has the permission for displaying the WM layer before adding it to the map.
+    */
+    testLayerPermission: function(thisRecord, source, layerStore, key, is_new_layer){
+        var self = this;
+        // not sure when the layer name is LayerName
+        if('LayerName' in thisRecord.data){
+            var name = thisRecord.get('LayerName');
+        } else {
+            var name = thisRecord.get('name');
+        }
+        $.ajax({
+            url: '/data/' + name,
+            method: 'GET',
+            complete: function(xhr, status){
+                if (xhr.status == 200){
+                    if(is_new_layer){
+                      self.addNewWMLayer(thisRecord, source, layerStore, key);
+                    } else {
+                      self.addLocalLayer(thisRecord, source, layerStore, key)
+                    }
+                }
+            },
+            dataType: 'jsonp'
+        });
+    },
 
+    /**
+    * Creates an instance for a new WM layer (created or uploaded) for being added to the map.
+    */
+    addNewWMLayer: function(thisRecord, source, layerStore, key){
+      if (this.worldMapSourceKey == null)
+          this.setWorldMapSourceKey();
+      var source = this.layerSources[this.worldMapSourceKey];
+      var name = thisRecord.get('name');
+      var tiled = thisRecord.get('tiled');
+      var layer_detail_url = 'http://worldmap.harvard.edu/data/' + name;
+      var layer = null;
+
+      $.ajax({
+          url: "/maps/addgeonodelayer/?layername=" + name,
+          type: "GET",
+          dataType: 'json',
+          async: false,
+          //params: {layername:name},
+          success: function(data){
+            layer = data['layer']
+            layer.source = key;
+            layer.buffer = 0;
+            layer.tiled = true;
+            layer.local = true;
+          },
+          error: function(jqXHR, textStatus, errorThrown){
+            alert('Exeption:' + exception);
+          }
+      });
+
+      this.loadRecord(source, layerStore, layer, layer_detail_url);
+
+    },
+
+    addLayerAjax: function (dataSource, dataKey, dataRecord) {
+        var geoEx = this;
+        var key = dataKey;
+        var source = dataSource;
+
+        var layerStore = this.mapPanel.layers;
+        /*
+        var isLocal = source instanceof gxp.plugins.GeoNodeSource &&
+          source.url.replace(this.urlPortRegEx, "$1/").indexOf(
+                this.localGeoServerBaseUrl.replace(
+                    this.urlPortRegEx, "$1/")) === 0;
+        */
+        // I believe this check is not needed any more (it was used by the previous add remote layers tool)
+        var isLocal = true;
+        //for (var i = 0, ii = records.length; i < ii; ++i) {
+        var thisRecord = dataRecord;
+        if (isLocal){
+            var authorized = true;
+            // layer from solr
+            if ('uuid' in thisRecord.data){
+                if (!$.parseJSON(thisRecord.get('is_public'))){
+                   geoEx.testLayerPermission(thisRecord, source, layerStore, key, false);
+                } else {
+                    // hack here
+                    geoEx.addLocalLayer(thisRecord, source, layerStore, key);
+                }
+            } else {
+                // newly uploaded and created layers
+                geoEx.testLayerPermission(thisRecord, source, layerStore, key, true);
+            }
+        } else {
+            //Not a local GeoNode layer, use source's standard method for creating the layer.
+            var layer = thisRecord.get("name");
+            var record = source.createLayerRecord({
+                name: layer,
+                source: key,
+                buffer: 0
+            });
+            //alert(layer + " created after FAIL");
+            if (record) {
+                if (record.get("group") === "background") {
+                    var pos = layerStore.queryBy(
+                        function(rec) {
+                            return rec.get("group") === "background"
+                        }).getCount();
+                    layerStore.insert(pos, [record]);
+                } else {
+                    category = "General";
+                    record.set("group", category);
+
+                    geoEx.layerTree.addCategoryFolder({"group":record.get("group")}, true);
+                    layerStore.add([record]);
+                }
+            }
+        }
+        //}
+        this.searchWindow.hide();
+    },
+
+    addEsriSourceAndLayer: function(layerStore, layer, layer_detail_url){
+      this.addLayerSource({
+          config: {url: layer.url, ptype: 'gxp_arcrestsource'},
+          callback: function(source_id){
+              layer.source = source_id;
+              source = this.layerSources[source_id];
+              this.loadRecord(source, this.mapPanel.layers, layer, layer_detail_url);
+          }
+        });
+    },
+
+    /**
+    Load a layer in the map.
+    */
+    loadRecord: function(source, layerStore, config, layer_detail_url){
+        var record = source.createLayerRecord(config);
+        var geoEx = this;
+        record.selected = true;
+        // record.data.detail_url = thisRecord.get('LayerUrl').indexOf('worldmap.harvard.edu') > -1 ?
+        //         '/data/' + thisRecord.get('LayerName') :
+        //         this.mapproxy_backend + JSON.parse(thisRecord.get('Location')).layerInfoPage;
+        record.data.detail_url = layer_detail_url;
+
+        if (record) {
+            if (record.get("group") === "background") {
+                var pos = layerStore.queryBy(
+                    function(rec) {
+                        return rec.get("group") === "background"
+                    }).getCount();
+                layerStore.insert(pos, [record]);
+
+            } else {
+                category = record.get("group");
+                if (!category || category == '')
+                    record.set("group", "General");
+
+                geoEx.layerTree.addCategoryFolder({"group":record.get("group")}, true);
+                layerStore.add([record]);
+
+                //geoEx.reorderNodes(record.getLayer());
+                geoEx.layerTree.overlayRoot.findDescendant("layer", record.getLayer()).select();
+            }
+        };
+    },
 
     initSearchPanel: function() {
 
@@ -1225,239 +1372,6 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
 //                    scope: this
 //                }
 //            });
-    },
-
-
-    /**
-     * Method: initCapGrid
-     * Constructs a window with a capabilities grid.
-     */
-    initCapGrid: function() {
-        var geoEx = this;
-        var initialSourceId, source, data = [];
-        for (var id in this.layerSources) {
-            source = this.layerSources[id];
-            if (source instanceof gxp.plugins.GeoNodeSource && source.url.replace(this.urlPortRegEx, "$1/").indexOf(this.localGeoServerBaseUrl.replace(this.urlPortRegEx, "$1/")) === 0) {
-                //do nothing
-            } else {
-                if (source.store) {
-                    data.push([id, this.layerSources[id].title || id]);
-                }
-            }
-        }
-
-        if (data[0] && data[0][0])
-            initialSourceId = data[0][0];
-
-
-        var sources = new Ext.data.ArrayStore({
-            fields: ["id", "title"],
-            data: data
-        });
-
-        var expander = new GeoExplorer.CapabilitiesRowExpander({
-            ows: this.localGeoServerBaseUrl + "ows"
-        });
-
-
-        var addLocalLayers = function() {
-            if (!this.mapID) {
-                Ext.Msg.alert("Save your Map View", "You must save this map view before uploading your data");
-            }
-            else
-                document.location.href = "/data/upload?map=" + this.mapID;
-        };
-
-
-        var addLayers = function() {
-            var key = sourceComboBox.getValue();
-            var layerStore = this.mapPanel.layers;
-            var source = this.layerSources[key];
-            var records = capGridPanel.getSelectionModel().getSelections();
-            this.addLayerAjax(source, key, records);
-        };
-
-        var source = null;
-
-        if (initialSourceId) {
-            source = this.layerSources[initialSourceId];
-            source.store.filterBy(function(r) {
-                return !!source.getProjection(r);
-            }, this);
-        }
-
-        var capGridPanel = new Ext.grid.GridPanel({
-            store: source != null ? source.store : [],
-            height:300,
-            region:'center',
-            autoScroll: true,
-            autoExpandColumn: "title",
-            plugins: [expander],
-            colModel: new Ext.grid.ColumnModel([
-                expander,
-                {id: "title", header: "Title", dataIndex: "title", sortable: true}
-            ]),
-            listeners: {
-                rowdblclick: addLayers,
-                scope: this
-            }
-        });
-
-        var sourceComboBox = new Ext.form.ComboBox({
-            store: sources,
-            valueField: "id",
-            displayField: "title",
-            triggerAction: "all",
-            editable: false,
-            allowBlank: false,
-            forceSelection: true,
-            mode: "local",
-            value: initialSourceId,
-            listeners: {
-                select: function(combo, record, index) {
-                    var source = this.layerSources[record.get("id")];
-                    var store = source.store;
-                    store.setDefaultSort('title', 'asc');
-                    store.filterBy(function(r) {
-                        return !!source.getProjection(r);
-                    }, this);
-                    expander.ows = store.url;
-                    capGridPanel.reconfigure(store, capGridPanel.getColumnModel());
-                    // TODO: remove the following when this Ext issue is addressed
-                    // http://www.extjs.com/forum/showthread.php?100345-GridPanel-reconfigure-should-refocus-view-to-correct-scroller-height&p=471843
-                    capGridPanel.getView().focusRow(0);
-                },
-                scope: this
-            }
-        });
-
-
-        var addWmsButton = new Ext.Button({
-            text: this.layerAdditionLabel,
-            iconCls: 'icon-add',
-            cls: 'x-btn-link-medium x-btn-text',
-            handler: function() {
-                newSourceWindow.show();
-            }
-        });
-
-
-        var addFeedButton = new Ext.Button({
-            text: this.feedAdditionLabel,
-            iconCls: 'icon-add',
-            cls:  'x-btn-link-medium x-btn-text',
-            handler: function() {
-                this.showFeedDialog();
-                this.searchWindow.hide();
-                newSourceWindow.hide();
-
-            },
-            scope: this
-        });
-
-        var app = this;
-        var newSourceWindow = new gxp.NewSourceWindow({
-            modal: true,
-            listeners: {
-                "server-added": function(url, type) {
-                    newSourceWindow.setLoading();
-                    app.addLayerSource({
-                        config: {url: url, ptype: type},
-                        callback: function(id) {
-                            // add to combo and select
-                            var record = new sources.recordType({
-                                id: id,
-                                title: app.layerSources[id].title || "Untitled" // TODO: titles
-                            });
-                            sources.insert(0, [record]);
-                            sourceComboBox.onSelect(record, 0);
-                            newSourceWindow.hide();
-                        },
-                        fallback: function() {
-                            // TODO: wire up success/failure
-                            newSourceWindow.setError("Error contacting server.\nPlease check the url and try again.");
-                            app.busyMask.hide();
-                        },
-                        scope: app
-                    });
-                }
-            },
-            // hack to get the busy mask so we can close it in case of a
-            // communication failure
-            addSource: function(url, success, failure, scope) {
-                app.busyMask = scope.loadMask;
-            }
-        });
-
-
-        var addLayerButton = new Ext.Button({
-            text: "Add Layers",
-            iconCls: "gxp-icon-addlayers",
-            handler: addLayers,
-            scope : this
-        });
-
-
-        var sourceAdditionLabel = { xtype: 'box', autoEl: { tag: 'span',  html: this.layerSelectionLabel }};
-
-        var sourceForm = new Ext.Panel({
-            frame:false,
-            border: false,
-            region: 'north',
-            height:40,
-            layout: new Ext.layout.HBoxLayout({
-                defaultMargins: {
-                    top: 10,
-                    bottom: 10,
-                    left: 10,
-                    right: 0
-                }
-            }),
-            items: [sourceAdditionLabel, sourceComboBox, {xtype: 'spacer', width:20 }, addWmsButton, addFeedButton]
-        });
-
-
-        var addLayerForm = new Ext.Panel({
-            frame:false,
-            border: false,
-            region: 'south',
-            layout: new Ext.layout.HBoxLayout({
-                defaultMargins: {
-                    top: 10,
-                    bottom: 10,
-                    left: 10,
-                    right: 0
-                }
-            }),
-            items: [addLayerButton]
-        });
-
-        this.capGrid = new Ext.Panel({
-            autoScroll: true,
-            title: this.externalDataText,
-            header: false,
-            layout: 'border',
-            border: false,
-            renderTo: 'externalDiv',
-            padding:'2 0 0 20',
-            items: [sourceForm, capGridPanel, addLayerForm],
-            listeners: {
-                hide: function(win) {
-                    capGridPanel.getSelectionModel().clearSelections();
-                }
-            }
-        });
-    },
-
-    /**
-     * Method: showCapabilitiesGrid
-     * Shows the window with a capabilities grid.
-     */
-    showCapabilitiesGrid: function() {
-        if (!this.capGrid) {
-            this.initCapGrid();
-        }
-        this.capGrid.show();
     },
 
     /** private: method[createMapOverlay]
@@ -1635,23 +1549,6 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
             scope: this
         };
 
-        var moreButton = new Ext.Button({
-            text: this.moreText,
-            cls: "more-overlay-element",
-            id: 'moreBtn',
-            menu: {
-                items: [
-                    flickrMenuItem,
-                    picasaMenuItem,
-                    youtubeMenuItem,
-                    hglMenuItem
-                ]
-            }
-        });
-
-        this.mapPanel.add(moreButton);
-
-
         var languageSelect = {
             xtype: 'box',
             contentEl: 'langselect',
@@ -1742,8 +1639,8 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
                 }
             },
             failure: function(response, options) {
-                return false;
                 Ext.Msg.alert('Error', response.responseText, this.showMetadataForm);
+                return false;
             },
             scope: this
         });
@@ -1819,8 +1716,9 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
                         }
                     },
                     failure: function(response, options) {
-                        return false;
                         Ext.Msg.alert('Error', response.responseText, this.showMetadataForm);
+                        return false;
+
                     },
                     scope: this
                 });
@@ -2084,6 +1982,16 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
         });
     },
 
+    initSubmitEndpointPanel: function() {
+        this.submitEndpointPanel = new Ext.Panel({
+            id: 'worldmap_submitendpoint_panel',
+            title: this.submitendpointText,
+            header: false,
+            contentEl: 'submitEndpointDiv',
+            autoScroll: true
+        });
+    },
+
 
 
     initTabPanel: function() {
@@ -2099,8 +2007,7 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
             activeTab: 0,
             region:'center',
             items: [
-                {contentEl: 'searchDiv', title: this.worldmapDataText, autoScroll: true},
-                this.capGrid
+                {contentEl: 'searchDiv', title: this.worldmapDataText, autoScroll: true}
             ]
         });
         if (this.config["edit_map"] && Ext.get("uploadDiv")) {
@@ -2110,6 +2017,7 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
             }
         }
         this.dataTabPanel.add(this.warperPanel);
+        this.dataTabPanel.add(this.submitEndpointPanel);
 
     },
 
@@ -2123,8 +2031,8 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
         // update anything that can change
         var center = this.mapPanel.map.getCenter();
         Ext.apply(state.map, {
-            center: [center.lon, center.lat],
-            zoom: this.mapPanel.map.zoom,
+            center: [0, 0],
+            zoom: 0,
             layers: []
         });
 
@@ -2156,24 +2064,37 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
         var llbounds = mapBounds.transform(
             new OpenLayers.Projection(this.mapPanel.map.projection),
             new OpenLayers.Projection("EPSG:4326"));
+
+
         this.bbox = new GeoNode.BoundingBoxWidget({
             proxy: "/proxy/?url=",
             viewerConfig:this.getBoundingBoxConfig(),
             renderTo: 'refine',
-            height: 275,
+            height: 350,
             isEnabled: false,
             useGxpViewer: true
         });
 
+        // Pass the bbox widget to heatmap so that it can accesd the search map
+        var heatmap = new GeoNode.HeatmapModel({bbox_widget: this.bbox});
+
+        //Pass the heatmap to the searchTable so that it can trigger searches
         this.searchTable = new GeoNode.SearchTable({
-            renderTo: 'search_results',
+            renderTo: 'search_form',
             trackSelection: true,
             permalinkURL: '/data/search',
-            searchURL: '/data/search/api',
+            // 0. use this one in production
+            //searchURL: "/solr",
+            // 1. when developing use the following searchURLs
+            // 1.1 this one in case using HH on dev server
+            // searchURL: "http://192.168.33.15:8983/solr/hypermap/select",
+            // 1.2 this one in case using HH on prod server
+            searchURL: "http://worldmap.harvard.edu/solr/hypermap/select",
             layerDetailURL: '/data/search/detail',
             constraints: [this.bbox],
             searchParams: {'limit':10, 'bbox': llbounds.toBBOX()},
-            searchOnLoad: false
+            searchOnLoad: false,
+            heatmap: heatmap
         });
 
         this.searchTable.hookupSearchButtons('refine');
@@ -2184,11 +2105,6 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
             addToMapButtonFunction: this.addWorldMapLayers,
             addToMapButtonTarget: this
         });
-
-
-        if (!this.capGrid) {
-            this.initCapGrid();
-        }
 
         if (!this.uploadPanel && this.config["edit_map"] && Ext.get("uploadDiv")) {
             this.initUploadPanel();
@@ -2202,6 +2118,10 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
             this.initWarperPanel();
         }
 
+        if (!this.submitEndpointPanel) {
+            this.initSubmitEndpointPanel();
+        }
+
         if (!this.dataTabPanel) {
             this.initTabPanel();
         }
@@ -2209,14 +2129,15 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
 
         this.searchWindow = new Ext.Window({
             id: 'ge_searchWindow',
-            title: "Add Layers",
+            title: "Search BETA",
             closeAction: 'hide',
             layout: 'fit',
-            width: 850,
-            height:600,
+            width: 900,
+            height: 590,
             items: [this.dataTabPanel],
             modal: true,
             autoScroll: true,
+            resizable: true,
             bodyStyle: 'background-color:#FFF'
         });
 
@@ -2268,7 +2189,10 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
         }
         this.searchWindow.show();
         this.searchWindow.alignTo(document, 'tl-tl');
-        //this.searchTable.doSearch();
+
+        //Apparently the ext slider has a bug in positioning the thumbs.
+        // this is a workaround, we do this after the search window has been rendered.
+        this.searchTable.dateInput.syncThumb();
 
         // Don't show the window if >70 layers on map (due to z-index issue with OpenLayers maps)
         if (this.mapPanel.layers.data.items.length > this.maxMapLayers) {
@@ -2437,4 +2361,3 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
         });
     }
 });
-

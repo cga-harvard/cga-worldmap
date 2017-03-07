@@ -40,7 +40,8 @@ class TestWorldMapClassification(TestTabularAPIBase):
 
     @classmethod
     def setUpClass(cls):
-        pass
+        cls.createDataverseUserAndGroup(add_user_to_dv_group=False)
+
 
     def setUp(self):
         super(TestWorldMapClassification, self).setUp()
@@ -162,9 +163,10 @@ class TestWorldMapClassification(TestTabularAPIBase):
         except:
             msgx("Unexpected error: %s" % sys.exc_info()[0])
             return
+        msg(r.text)
+        msg(r.status_code)
 
         self.assertEqual(r.status_code, 200, "Expected status code 200 but received '%s'" % r.status_code)
-        msg(r.text)
 
 
     #def test_it(self):
@@ -309,7 +311,6 @@ print r.status_code
 
         self.assertEquals(r.status_code, 200, "Expected status code of 200 but received '%s'" % r.status_code)
 
-        return
 
         #-----------------------------------------------------------
         msgn("(1h) Convert response to JSON")
@@ -336,17 +337,20 @@ print r.status_code
         f_attrs = LayerAttributeRequestForm(params_for_attr_request)
         self.assertTrue(f_attrs.is_valid(), 'ClassifyRequestDataForm did not validate. Errors:\n %s' % f_attrs.errors)
 
-        retrieve_attribute_params = f_attrs.get_api_params_with_signature()
-        msgt('retrieve_attribute_params: %s' % retrieve_attribute_params)
-        self.assertTrue(retrieve_attribute_params.has_key(SIGNATURE_KEY)\
-                        , 'classify_params did not have SIGNATURE_KEY: "%s"' % SIGNATURE_KEY)
+        retrieve_attribute_params = f_attrs.cleaned_data  #get_api_params_with_signature()
+        #msgt('retrieve_attribute_params: %s' % retrieve_attribute_params)
+        #self.assertTrue(retrieve_attribute_params.has_key(SIGNATURE_KEY)\
+        #                , 'classify_params did not have SIGNATURE_KEY: "%s"' % SIGNATURE_KEY)
+
 
         #-----------------------------------------------------------
         msgn("(1i) Make classification param request")
         #-----------------------------------------------------------
         GET_CLASSIFY_ATTRIBUTES_API_PATH = reverse('view_layer_classification_attributes', args=())
         try:
-            r = requests.post(GET_CLASSIFY_ATTRIBUTES_API_PATH, data=retrieve_attribute_params)
+            r = requests.post(GET_CLASSIFY_ATTRIBUTES_API_PATH,\
+                        data=retrieve_attribute_params,\
+                        auth=self.get_creds_for_http_basic_auth())
         except requests.exceptions.ConnectionError as e:
             msgx('Connection error: %s' % e.message)
         except:
@@ -365,8 +369,11 @@ print r.status_code
 
         self.assertTrue(json_resp.has_key('data'), 'JSON should have key "success".  But found keys: %s' % json_resp.keys())
 
-        attribute_data = json_resp.get('data', None)
-        self.assertTrue(attribute_data is not None, "attribute_data was None")
+        attribute_info = json_resp['data'].get('attribute_info', None)
+        self.assertTrue(attribute_info is not None, "attribute_info was None")
 
-        print attribute_data
-        self.assertEqual(len(attribute_data), 54, "Should be 54 attributes but found only %s" % len(attribute_data))
+        attribute_info = eval(attribute_info)
+        msgt('attribute_info')
+        msg(attribute_info)
+        self.assertEqual(len(attribute_info), 53,\
+            "Should be 54 attributes but found %s" % len(attribute_info))

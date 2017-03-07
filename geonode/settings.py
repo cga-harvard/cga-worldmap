@@ -12,15 +12,15 @@ gettext = lambda s: s
 
 ####################### DATAVERSE_INFO_REPOSITORY_PATH
 #
-# For Dataverse/Worldmap communication, the following repository is required: 
+# For Dataverse/Worldmap communication, the following repository is required:
 #
 #   https://github.com/IQSS/shared-dataverse-information
 #
 # It may be accessed in 1 of 2 ways
 # -----------------------------------------------
-# 
+#
 #   (1) Add to the sys.path.  In the local_settings.py:
-#       (a) Add/Uncomment the code below (lines 28-31), 
+#       (a) Add/Uncomment the code below (lines 28-31),
 #           ending with the "sys.path.append" line
 #       (b) Set the appropriate path for "DATAVERSE_INFO_REPOSITORY_PATH"
 #   (2) or run "pip install shared_dataverse_information"
@@ -138,6 +138,7 @@ INSTALLED_APPS = (
     'django.contrib.messages',
 
     # Third party apps
+    'tastypie',
     'django_extensions',
     'registration',
     'profiles',
@@ -160,13 +161,12 @@ INSTALLED_APPS = (
     'geonode.capabilities',
     'geonode.queue',
     'geonode.certification',
-    
     # Datatable API
     'geonode.contrib.datatables',
-    
     #'geonode.hoods',
-    #'geonode.gazetteer',
+    'geonode.gazetteer',
     #'debug_toolbar',
+    'geonode.actions',
 
     #DVN apps
     'shared_dataverse_information.dataverse_info',           # external repository: https://github.com/IQSS/shared-dataverse-information
@@ -372,40 +372,102 @@ REGISTRATION_OPEN = True
 ACCOUNT_ACTIVATION_DAYS = 30
 SERVE_MEDIA = DEBUG;
 
+BING_API_KEY = "your-api-here"
 
 MAP_BASELAYERS = [
- {
+    {
+        "source": {
+            "ptype": "gxp_gnsource",
+            "url": GEOSERVER_BASE_URL + "wms",
+            "restUrl": "/gs/rest"
+        }
+    }, {
         "source": {"ptype": "gx_olsource"},
         "type": "OpenLayers.Layer",
-        "args": [gettext("No background")],
+        "args": ["No background"],
         "visibility": False,
         "fixed": True,
         "group": "background"
     }, {
         "source": {"ptype": "gx_olsource"},
         "type": "OpenLayers.Layer.OSM",
-        "args": [gettext("OpenStreetMap")],
+        "args": ["OpenStreetMap"],
         "visibility": False,
         "fixed": True,
         "group": "background"
     }, {
-        "source": {"ptype": "gxp_mapquestsource"},
-        "name": "osm",
-        "group": "background",
-        "visibility": True
-    }, {
-        "source": {"ptype": "gxp_mapquestsource"},
-        "name": "naip",
-        "group": "background",
-        "visibility": False
-    }, {
-        "source": {"ptype": "gxp_bingsource"},
+        "source": {
+            "ptype": "gxp_bingsource",
+            "apiKey": BING_API_KEY
+        },
         "name": "AerialWithLabels",
         "fixed": True,
         "visibility": False,
         "group": "background"
-    }, {
+    },
+{
         "source": {"ptype": "gxp_mapboxsource"},
+    },
+    {
+        "source": {"ptype": "gxp_stamensource"},
+        "name": "watercolor",
+        "visibility": False,
+        "group": "background",
+        "title": "Stamen Watercolor"
+        },
+    {
+        "source": {"ptype": "gxp_stamensource"},
+        "name": "toner",
+        "visibility": False,
+        "group": "background",
+        "title": "Stamen Toner"
+    },
+    {
+        "source": {
+            "url": "http://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer",
+            "ptype": "gxp_arcgiscachesource"},
+        "group": "background",
+        "name": "World Street Map",
+        "visibility": False,
+        "fixed": True,
+        "format": "jpeg",
+        "tiled" : False,
+        "title": "ESRI World Street Map"
+    },{
+        "source": {
+            "url": "http://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+            "ptype": "gxp_arcgiscachesource"},
+        "group": "background",
+        "format": "jpeg",
+        "name": "World Imagery",
+        "visibility": False,
+        "fixed": True,
+        "tiled" : False,
+        "title": "ESRI World Imagery"
+    },
+    {
+        "source": {
+            "url": "http://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer",
+            "ptype": "gxp_arcgiscachesource"},
+        "group": "background",
+        "name": "Light Gray Canvas Base",
+        "visibility": False,
+        "fixed": True,
+        "format": "jpeg",
+        "tiled" : False,
+        "title": "ESRI Light Gray Reference"
+    },
+    {
+        "source": {
+            "url": "http://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer",
+            "ptype": "gxp_arcgiscachesource"},
+        "group": "background",
+        "name": "Dark Gray Canvas Base",
+        "visibility": False,
+        "fixed": True,
+        "format": "jpeg",
+        "tiled" : False,
+        "title": "ESRI Dark Gray Reference"
     },
     {
         "source": {"ptype": "gx_googlesource"},
@@ -417,7 +479,7 @@ MAP_BASELAYERS = [
         "source": {"ptype": "gx_googlesource"},
         "group": "background",
         "name": "TERRAIN",
-        "visibility": False,
+        "visibility": True,
         "fixed": True,
     }, {
         "source": {"ptype": "gx_googlesource"},
@@ -435,10 +497,7 @@ MAP_BASELAYERS = [
     }
 ]
 
-
-#GEONODE_CLIENT_LOCATION = "http://localhost:9090/"
 GEONODE_CLIENT_LOCATION = "/static/geonode/"
-
 
 # GeoNode vector data backend configuration.
 
@@ -458,40 +517,26 @@ DB_DATASTORE_TYPE = ''
 DB_DATASTORE_NAME = ''
 DB_DATASTORE_ENGINE = 'django.contrib.gis.db.backends.postgis'
 
-USE_GAZETTEER = False
-##### START GAZETTEER SETTINGS #####
+"""
+START GAZETTEER SETTINGS
+"""
 # Defines settings for multiple databases,
 # only use if PostGIS integration enabled
 # and USE_GAZETTEER = True
-#GAZETTEER_DB_ALIAS = "wmdata"
-#DATABASES = {
-#    'default': {
-#        'ENGINE': DATABASE_ENGINE,
-#        'NAME': DATABASE_NAME,
-#        'USER' : DATABASE_USER,
-#        'PASSWORD': DATABASE_PASSWORD,
-#        'PORT': DATABASE_PORT,
-#        'HOST': DATABASE_HOST
-#    },
-#    'wmdata': {
-#        'ENGINE': DB_DATASTORE_ENGINE,
-#        'NAME': DB_DATASTORE_DATABASE,
-#        'USER' : DB_DATASTORE_USER,
-#        'PASSWORD': DB_DATASTORE_PASSWORD,
-#        'PORT': DB_DATASTORE_PORT,
-#        'HOST': DATABASE_HOST
-#    }
-#
-#}
-#DATABASE_ROUTERS = ['geonode.utils.WorldmapDatabaseRouter']
-#SOUTH_DATABASE_ADAPTERS = {
+USE_GAZETTEER = False
+GAZETTEER_DB_ALIAS = "wmdata"
+GAZETTEER_FULLTEXTSEARCH = False
+# Uncomment the following if USE_GAZETTEER = True
+# DATABASE_ROUTERS = ['geonode.utils.WorldmapDatabaseRouter']
+# SOUTH_DATABASE_ADAPTERS = {
 #    'default': "south.db.sqlite3",
 #    'wmdata' : "south.db.postgresql_psycopg2",
 #
 #    }
-#SOUTH_TESTS_MIGRATE = False
-#GAZETTEER_FULLTEXTSEARCH = False
-##### END GAZETTEER SETTINGS #####
+# SOUTH_TESTS_MIGRATE = False
+"""
+END GAZETTEER SETTINGS
+"""
 
 #Set to true to schedule asynchronous updates of
 #layer bounds updates (after creating/editing features)
@@ -543,6 +588,12 @@ CSRF_COOKIE_HTTPONLY = True
 
 WORLDMAP_TOKEN_FOR_DATAVERSE = 'FakeToken'
 
+DB_DATAVERSE_NAME = 'dataverse'
+DATAVERSE_GROUP_NAME = 'dataverse'
+
+TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
+if TESTING:
+    SOUTH_TESTS_MIGRATE = False
 try:
     from local_settings import *
 except ImportError:

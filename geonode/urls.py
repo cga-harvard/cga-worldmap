@@ -9,6 +9,9 @@ import geonode.gazetteer.urls
 import geonode.mapnotes.urls
 import geonode.capabilities.urls
 
+from tastypie.api import Api
+from maps.api.resources import LayerResource, TagResource, LayerCategoryResource
+from actions.api.resources import ActionLayerDeleteResource
 
 # Uncomment the next two lines to enable the admin:
 from django.contrib import admin
@@ -25,6 +28,13 @@ sitemaps = {
     "layer": LayerSitemap,
     "map": MapSitemap
 }
+
+# api
+wm_api = Api(api_name='1.5')
+wm_api.register(LayerResource())
+wm_api.register(TagResource())
+wm_api.register(LayerCategoryResource())
+wm_api.register(ActionLayerDeleteResource())
 
 urlpatterns = patterns('',
 
@@ -61,7 +71,13 @@ urlpatterns = patterns('',
     url(r'^sitemap\.xml$', 'django.contrib.sitemaps.views.sitemap',
                                   {'sitemaps': sitemaps}, name='sitemap'),
     (r'^i18n/', include('django.conf.urls.i18n')),
+
+    # admin
     (r'^admin/', include(admin.site.urls)),
+
+    # Tastypie API
+    (r'^api/', include(wm_api.urls)),
+
     (r'^affiliation/confirm', 'geonode.register.views.confirm'),
     (r'^avatar/', include('avatar.urls')),
     (r'^accounts/', include('geonode.register.urls')),
@@ -70,17 +86,17 @@ urlpatterns = patterns('',
     (r'^download/(?P<service>[^/]*)/(?P<layer>[^/]*)/(?P<format>[^/]*)/?$','geonode.proxy.views.download'),
     (r'^gazetteer/', include('geonode.gazetteer.urls')),
     (r'^bostonhoods/?', include('geonode.hoods.urls')),
-    (r'^certification/', include('geonode.certification.urls')),    
+    (r'^certification/', include('geonode.certification.urls')),
     url(r'^autocomplete/', include('autocomplete_light.urls')),
-    
-    # Dataverse/GeoConnect API
-    (r'^dataverse-layer/', include('geonode.contrib.dataverse_layer_metadata.urls')),
-    (r'^dataverse/', include('geonode.contrib.dataverse_connect.urls')),
-    (r'^dataverse-tabular/', include('geonode.contrib.datatables.urls_dataverse')),
+    url(r'^users_remove/?$', 'geonode.maps.views.users_remove', name='users_remove'),
 
     # Datatables API
     (r'^datatables/', include('geonode.contrib.datatables.urls')),
-    
+
+    # Dataverse/GeoConnect API
+    (r'^dataverse/api/', include('geonode.contrib.dataverse_connect.urls')),
+    (r'^dataverse/api/tabular/', include('geonode.contrib.datatables.urls_dataverse')),
+
 )
 
 urlpatterns += geonode.proxy.urls.urlpatterns

@@ -28,7 +28,7 @@ if (window.GeoExplorer) {
         layerContainerText: gettext("Map Layers"),
         layerSelectionLabel: gettext("View available data from:"),
         layerLocalLabel: gettext("Upload your own data"),
-        
+
         layersContainerText: gettext("Data"),
         layersPanelText: gettext("Layers"),
         legendPanelText: gettext("Legend"),
@@ -38,7 +38,7 @@ if (window.GeoExplorer) {
         maxLayersTitle: gettext('Warning'),
         maxLayersText: gettext('You now have %n layers in your map.  With more than %max layers you may experience problems with layer ordering, info balloon display, and general performance.'),
         measureSplitText: gettext("Measure"),
-        metaDataHeader: gettext("About this Map View"),
+        metaDataHeader: gettext("Save Map"),
         metaDataMapAbstract: gettext("Abstract (brief description)"),
         metaDataMapKeywords: gettext("Keywords (for Picasa and YouTube overlays)"),
         metaDataMapIntroText: gettext("Introduction (tell visitors more about your map view)"),
@@ -79,7 +79,7 @@ if (window.GeoExplorer) {
         addCategoryActionText: gettext('Add New Category'),
         addCategoryActionTipText: gettext('Add a new layer category'),
         renameCategoryActionText: gettext('Rename Category'),
-        renameCategoryActionTipText: gettext('Rename this category'),    
+        renameCategoryActionTipText: gettext('Rename this category'),
         removeCategoryActionText: gettext('Remove Category'),
         removeCategoryActionTipText: gettext('Remove this category and layers'),
         layerPropertiesText: gettext('Layer Properties'),
@@ -104,7 +104,7 @@ if (window.GeoExplorer) {
         uploadLayerText: gettext('Upload Layer'),
         createLayerText: gettext('Create Layer'),
         rectifyLayerText: gettext('Rectify Layer'),
-        worldmapDataText:  gettext('WorldMap Data'),
+        worldmapDataText:  gettext('Search'),
         externalDataText: gettext('External Data'),
         leavePageWarningText: gettext('If you leave this page, unsaved changes will be lost.')
     });
@@ -221,7 +221,7 @@ if (window.GeoNode && GeoNode.SearchTable) {
         loadingText: gettext("Loading..."),
         permalinkText: gettext('permalink'),
         unviewableTooltip: gettext('You do not have permission to view this data'),
-        remoteTooltip: gettext('This data is stored on a remote server')    
+        remoteTooltip: gettext('This data is stored on a remote server')
     });
 }
 if (window.GeoNode && GeoNode.SearchTableRowExpander) {
@@ -248,7 +248,7 @@ if (window.GeoNode && GeoNode.DataCart) {
         titleText: gettext('Title'),
         clearSelectedButtonText: gettext('Clear Selected'),
         clearAllButtonText: gettext('Clear All'),
-        addLayersButtonText: gettext('Add Selected Layers')
+        addLayersButtonText: gettext('Add to Map')
     });
 }
 

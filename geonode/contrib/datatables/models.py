@@ -1,8 +1,7 @@
 import psycopg2
+import json
 from django.db import models
 from django.db.models import signals
-
-from django.core import serializers
 
 from geonode.maps.models import LayerAttribute, LayerAttributeManager
 from geonode.maps.models import Layer
@@ -12,12 +11,14 @@ from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 
 from .db_helper import get_datastore_connection_string
+from geonode.contrib.datatables.utils_joins import drop_view_by_name
 
 TRANSFORMATION_FUNCTIONS = []
 
 
 class DataTableAttributeManager(models.Manager):
-    """Helper class to access filtered attributes
+    """
+    Helper class to access filtered attributes
     """
     def visible(self):
         return self.get_query_set().filter(visible=True).order_by('display_order')
@@ -153,16 +154,43 @@ class GeocodeType(models.Model):
         ordering = ('sort_order', 'name')
 
 class JoinTargetFormatType(models.Model):
+    """
+    This information is sent via API and can be used to specify
+    the expected data format from the client.
+
+    For example, a census TRACT may require 6 digits, zero padded if needed
+
+    Currently, data cleaning is NOT done on the WorldMap side.
+    """
     name = models.CharField(max_length=255, help_text='Census Tract (6 digits, no decimal)')
-    description_shorthand = models.CharField(max_length=255, help_text='dddddd')
-    clean_steps = models.TextField(help_text='verbal description. e.g. Remove non integers. Check for empty string. Pad with zeros until 6 digits.')
-    regex_replacement_string = models.CharField(help_text='"[^0-9]"; Usage: re.sub("[^0-9]", "", "1234.99"'\
-                                , max_length=255)
-    python_code_snippet = models.TextField(blank=True)
-    tranformation_function_name = models.CharField(max_length=255, blank=True, choices=TRANSFORMATION_FUNCTIONS)
+
+    is_zero_padded = models.BooleanField(default=False)
+    expected_zero_padded_length = models.IntegerField(default=-1)
+
+    description = models.TextField(help_text='verbal description for client. e.g. Remove non integers. Check for empty string. Pad with zeros until 6 digits.')
+
+
+    regex_match_string = models.CharField(max_length=255, blank=True,\
+            help_text="""r'\\d{6}'; Usage: re.search(r'\\d{6}', your_input)""")
+    #regex_replacement_string = models.CharField(max_length=255, blank=True,\
+    #        help_text='"[^0-9]"; Usage: re.sub("[^0-9]", "", "1234.99"')
+    #python_code_snippet = models.TextField(blank=True, help_text='currently unused')
+    #tranformation_function_name = models.CharField(max_length=255, blank=True, choices=TRANSFORMATION_FUNCTIONS)
 
     created = models.DateTimeField(auto_now_add=True)
     modified =models.DateTimeField(auto_now=True)
+
+    def as_json(self):
+        """Return the object in dict format"""
+        info = dict(name=self.name,\
+                description=self.description,\
+                is_zero_padded=self.is_zero_padded,\
+                expected_zero_padded_length=self.expected_zero_padded_length)
+        if self.regex_match_string:
+            info['regex_match_string'] = self.regex_match_string
+
+        return info
+
 
     def __unicode__(self):
         return self.name
@@ -173,17 +201,23 @@ class JoinTarget(models.Model):
     """
     JoinTarget
     """
+    name = models.CharField(max_length=100,\
+        help_text='Will be presented to Geoconnect Users. e.g. "Boston Zip Codes (5 digit)"')
     layer = models.ForeignKey(Layer)
     attribute = models.ForeignKey(LayerAttribute)
     geocode_type = models.ForeignKey(GeocodeType, on_delete=models.PROTECT)
-    type = models.ForeignKey(JoinTargetFormatType, null=True, blank=True)
-    year = models.IntegerField(null=True, blank=True)
+    expected_format = models.ForeignKey(JoinTargetFormatType, null=True, blank=True)
+    year = models.IntegerField()
 
     created = models.DateTimeField(auto_now_add=True)
     modified =models.DateTimeField(auto_now=True)
 
     def __unicode__(self):
         return self.layer.title
+
+    class Meta:
+        unique_together = ('layer', 'attribute',)
+        ordering = ('year', 'name')
 
     def return_to_layer_admin(self):
         if not self.id or not self.layer:
@@ -196,12 +230,10 @@ class JoinTarget(models.Model):
     def as_json(self):
         """Return the object in dict format"""
 
-        if self.type:
-            type = {'name':self.type.name,\
-                'description':self.type.description_shorthand,\
-                'clean_steps':self.type.clean_steps}
+        if self.expected_format:
+            expected_format = self.expected_format.as_json()
         else:
-            type = None
+            expected_format = None
 
         if self.layer.abstract:
             abstract = self.layer.abstract.strip()
@@ -209,17 +241,15 @@ class JoinTarget(models.Model):
             abstract = None
 
         return dict(id=self.id,\
+            name=self.name,\
             layer=self.layer.typename,\
             title=self.layer.title,\
             abstract=abstract,\
             attribute={'attribute':self.attribute.attribute, 'type':self.attribute.attribute_type},\
-            type=type,\
+            expected_format=expected_format,\
             geocode_type=self.geocode_type.name,\
             geocode_type_slug=self.geocode_type.slug,\
             year=self.year)
-
-    class Meta:
-        unique_together = ('layer', 'attribute',)
 
 
 class LatLngTableMappingRecord(models.Model):
@@ -237,27 +267,33 @@ class LatLngTableMappingRecord(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     modified =models.DateTimeField(auto_now=True)
 
-
     def __unicode__(self):
         return '%s' % self.datatable
 
     def as_json(self):
         data_dict = {}
 
-        straight_attrs = ('id', 'mapped_record_count', 'unmapped_record_count')#, 'created', 'modified')
+        straight_attrs = ('mapped_record_count', 'unmapped_record_count')#, 'created', 'modified')
         for attr in straight_attrs:
             data_dict[attr] = self.__dict__.get(attr)
 
-        data_dict.update( dict( datatable=self.datatable.table_name\
-                        , lat_attribute=dict(attribute=self.lat_attribute.attribute\
-                                    , type=self.lat_attribute.attribute_type)\
-                        , lng_attribute=dict(attribute=self.lng_attribute.attribute\
-                                    , type=self.lng_attribute.attribute_type)\
-                        , layer_name=self.layer.name\
-                        , layer_typename=self.layer.typename\
-                        , layer_link=self.layer.get_absolute_url()\
-                        )\
-                    )
+        data_dict['lat_lng_record_id'] = self.id
+        data_dict['datatable'] = self.datatable.table_name
+        data_dict['datatable_id'] = self.datatable.id
+        data_dict['layer_id'] = self.layer.id
+        data_dict['layer_name'] = self.layer.name
+        data_dict['layer_typename'] = self.layer.typename
+        data_dict['layer_link'] = self.layer.get_absolute_url()
+
+        data_dict['lat_attribute'] = dict(attribute=self.lat_attribute.attribute\
+                    , type=self.lat_attribute.attribute_type)
+        data_dict['lng_attribute'] = dict(attribute=self.lng_attribute.attribute\
+                    , type=self.lng_attribute.attribute_type)
+        if self.unmapped_records_list:
+            try:
+                data_dict['unmapped_records_list'] = json.loads(self.unmapped_records_list)
+            except TypeError:
+                data_dict['unmapped_records_list'] = self.unmapped_records_list
 
         return data_dict
 
@@ -291,17 +327,12 @@ class TableJoin(models.Model):
         return self.view_name
 
     def remove_joins(self):
-        conn = psycopg2.connect(get_datastore_connection_string())
-        cur = conn.cursor()
-        cur.execute('drop view if exists %s;' % self.view_name)
-        #cur.execute('drop materialized view if exists %s;' % self.view_name.replace('view_', ''))
-        conn.commit()
-        cur.close()
-        conn.close()
+        drop_view_by_name(self.view_name)
 
     def as_json(self):
         return dict(
-            id=self.id, datable=self.datatable.table_name, source_layer=self.source_layer.typename, join_layer=self.join_layer.typename,
+            id=self.id, datatable=self.datatable.table_name, source_layer=self.source_layer.typename, join_layer=self.join_layer.typename,
+            join_layer_title=self.join_layer.title,
             table_attribute={'attribute':self.table_attribute.attribute, 'type':self.table_attribute.attribute_type},
             layer_attribute={'attribute':self.layer_attribute.attribute, 'type':self.layer_attribute.attribute_type},
             view_name=self.view_name,

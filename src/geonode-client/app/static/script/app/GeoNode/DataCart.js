@@ -1,7 +1,7 @@
 Ext.namespace("GeoNode");
 
 GeoNode.DataCart = Ext.extend(Ext.util.Observable, {
-    
+
     selectedLayersText: 'UT: Selected Layers',
     emptySelectionText: 'UT: No Layers Selected',
     titleText: 'UT: Title',
@@ -25,20 +25,39 @@ GeoNode.DataCart = Ext.extend(Ext.util.Observable, {
         });
         return layerIds;
     },
-    
+
     doLayout: function() {
         var widgetHTML =
         '<div class="selection-table"></div>' +
         '<div class="selection-controls"></div>' +
         '<div class="selection-ops></div>"';
-        
+
         var el = Ext.get(this.renderTo);
         el.update(widgetHTML);
         var controls_el = el.query('.selection-controls')[0];
         var table_el = el.query('.selection-table')[0];
         var ops_el = el.query('.selection-ops')[0];
-        
-        sm = new Ext.grid.CheckboxSelectionModel({});
+
+        var self = this;
+        var sm = new Ext.grid.RowSelectionModel({
+            listeners: {
+                rowdeselect: function(sm, rowIndex, record){
+                    self.store.removeAt(rowIndex);
+                    self.store.reselect();
+                }
+            }
+        });
+        sm.handleMouseDown = function(g, rowIndex, e){
+            var view = this.grid.getView();
+            var isSelected = this.isSelected(rowIndex);
+            if(isSelected){
+                this.deselectRow(rowIndex);
+            }else{
+                this.selectRow(rowIndex, true);
+                view.focusRow(rowIndex);
+            }
+        };
+
         this.grid = new Ext.grid.GridPanel({
             store: this.store,
             viewConfig: {
@@ -54,7 +73,6 @@ GeoNode.DataCart = Ext.extend(Ext.util.Observable, {
             colModel: new Ext.grid.ColumnModel({
                 defaults: {sortable: false, menuDisabled: true},
                 columns: [
-                    sm,
                     {dataIndex: 'title'}
                 ]
             })
@@ -67,7 +85,7 @@ GeoNode.DataCart = Ext.extend(Ext.util.Observable, {
 
         var addToMapButton = new Ext.Button({
             text: this.addLayersButtonText,
-            iconCls: 'icon-add',
+            iconCls: 'prominent-btn',
             cls: 'x-btn-link-medium x-btn-text'
         });
 
@@ -81,7 +99,7 @@ GeoNode.DataCart = Ext.extend(Ext.util.Observable, {
             var addToMapTarget = this.addToMapButtonTarget;
             var dataGrid = this.grid;
             var dataCart = this;
-            
+
             addToMapButton.on('click', function() {
             addToMapFunction.call(addToMapTarget, dataGrid.getSelectionModel().getSelections());
             clearAll.call(dataCart);
@@ -90,7 +108,8 @@ GeoNode.DataCart = Ext.extend(Ext.util.Observable, {
 
 
         var clearSelectedButton = new Ext.Button({
-            text: this.clearSelectedButtonText
+            text: this.clearSelectedButtonText,
+            iconCls: "not-prominent-btn"
         });
         clearSelectedButton.on('click', function() {
             sm.each(function(rec) {
@@ -103,7 +122,7 @@ GeoNode.DataCart = Ext.extend(Ext.util.Observable, {
         }, this);
 
 
-        
+
         var clearAllButton = new Ext.Button({
             text: this.clearAllButtonText
         });
@@ -124,11 +143,11 @@ GeoNode.DataCart = Ext.extend(Ext.util.Observable, {
                      right: 0
                   }
              }),
-             items: [clearSelectedButton, clearAllButton]
+             items: [clearSelectedButton]
          });
-        
+
         if (this.addToMapButtonFunction) {
-        	controlsForm.items.insert(0, addToMapButton);
+        	controlsForm.items.insert(1, addToMapButton);
         }
 
 
