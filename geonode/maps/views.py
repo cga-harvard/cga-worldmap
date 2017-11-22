@@ -156,6 +156,7 @@ def map_detail(request, mapid, snapshot=None, template='maps/map_detail.html'):
         'perms_list': get_perms(request.user, map_obj.get_self_resource()),
         'permissions_json': _perms_info_json(map_obj),
         "documents": get_related_documents(map_obj),
+        'urlsuffix':get_suffix_if_custom(map_obj),
     }
 
     context_dict["preview"] = getattr(
@@ -323,6 +324,7 @@ def map_metadata(request, mapid, template='maps/map_metadata.html'):
         "crs": getattr(settings, 'DEFAULT_MAP_CRS', 'EPSG:900913'),
         "metadata_author_groups": metadata_author_groups,
         "GROUP_MANDATORY_RESOURCES": getattr(settings, 'GROUP_MANDATORY_RESOURCES', False),
+        "urlsuffix": get_suffix_if_custom(map_obj),
     }))
 
 
@@ -345,7 +347,8 @@ def map_remove(request, mapid, template='maps/map_remove.html'):
 
     if request.method == 'GET':
         return render_to_response(template, RequestContext(request, {
-            "map": map_obj
+            "map": map_obj,
+            'urlsuffix': get_suffix_if_custom(map_obj),
         }))
 
     elif request.method == 'POST':
@@ -1206,3 +1209,14 @@ def map_metadata_detail(
 @login_required
 def map_batch_metadata(request, ids):
     return batch_modify(request, ids, 'Map')
+
+def get_suffix_if_custom(map):
+    if map.use_custom_template:
+        if map.officialurl:
+            return map.officialurl
+        elif map.urlsuffix:
+            return map.urlsuffix
+        else:
+            return None
+    else:
+        return None

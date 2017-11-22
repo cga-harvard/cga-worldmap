@@ -36,4 +36,5 @@ class MapForm(ResourceBaseForm):
             'projection',
             'center_x',
             'center_y',
+            'use_custom_template',
         )
