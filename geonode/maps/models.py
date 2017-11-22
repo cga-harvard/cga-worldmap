@@ -130,6 +130,10 @@ class Map(ResourceBase, GXPMapBase):
     # Alphanumeric alternative to referencing maps by id, appended to end of
     # URL instead of id, ie http://domain/maps/someview
     content_map = models.TextField(_('Site Content'), blank=True, null=True, default=DEFAULT_CONTENT)
+    use_custom_template = models.BooleanField(_('Use a custom template'),default=False)
+    """
+    Whether to show default banner/styles or custom ones.
+    """
 
     featuredurl = models.CharField(
         _('Featured Map URL'),
@@ -140,6 +144,7 @@ class Map(ResourceBase, GXPMapBase):
     """
     The map view template page to use, if different from default
     """
+
     def __unicode__(self):
         return '%s by %s' % (
             self.title, (self.owner.username if self.owner else "<Anonymous>"))
