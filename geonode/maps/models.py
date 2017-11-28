@@ -136,6 +136,8 @@ class Map(ResourceBase, GXPMapBase):
         max_length=255,
         blank=True)
     # Full URL for featured map view, ie http://domain/someview
+    custom_template = models.TextField (blank=True, null= True)
+    
 
     def __unicode__(self):
         return '%s by %s' % (
