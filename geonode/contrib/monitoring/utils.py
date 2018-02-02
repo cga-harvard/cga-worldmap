@@ -19,7 +19,6 @@
 #########################################################################
 
 import os
-import pytz
 import threading
 import traceback
 import Queue
@@ -172,8 +171,7 @@ class GeoServerMonitorClient(object):
 
 
 def align_period_end(end, interval):
-    utc = pytz.utc
-    day_end = datetime(*end.date().timetuple()[:6]).replace(tzinfo=utc)
+    day_end = datetime(*end.date().timetuple()[:6])
     # timedelta
     diff = (end - day_end)
     # seconds
@@ -186,8 +184,7 @@ def align_period_end(end, interval):
 
 
 def align_period_start(start, interval):
-    utc = pytz.utc
-    day_start = datetime(*start.date().timetuple()[:6]).replace(tzinfo=utc)
+    day_start = datetime(*start.date().timetuple()[:6])
     # timedelta
     diff = (start - day_start)
     # seconds
@@ -204,8 +201,7 @@ def generate_periods(since, interval, end=None, align=True):
     Generator of periods: tuple of [start, end).
     since parameter will be aligned to closest interval before since.1
     """
-    utc = pytz.utc
-    end = end or datetime.utcnow().replace(tzinfo=utc)
+    end = end or datetime.now()
     if align:
         since_aligned = align_period_start(since, interval)
     else:

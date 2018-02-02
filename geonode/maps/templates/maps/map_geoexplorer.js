@@ -133,7 +133,7 @@ Ext.onReady(function() {
        }
     }, {{ config }});
 
-    app = new GeoNode.Composer(config);
+    app = new GeoNode.Viewer(config);
 {% endautoescape %}
 });
 </script>

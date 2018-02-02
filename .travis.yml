@@ -32,8 +32,6 @@ branches:
 
 before_install:
   - scripts/misc/qgis_server_setup.sh before_install
-  - chmod +x scripts/misc/bdd_setup.sh
-  - scripts/misc/bdd_setup.sh before_install
 
 install:
   - sudo apt-get -qq -y update
@@ -52,12 +50,11 @@ install:
 before_script:
   # For QGIS Server Travis steps
   - scripts/misc/qgis_server_setup.sh before_script
-  - scripts/misc/bdd_setup.sh before_script
 
   - paver setup
 
 script:
-  - paver run_tests --coverage --local false
+  - paver run_tests --coverage
 
 after_script:
   # For QGIS Server Travis steps

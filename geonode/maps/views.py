@@ -60,7 +60,7 @@ from geonode.maps.forms import MapForm
 from geonode.security.views import _perms_info_json
 from geonode.base.forms import CategoryForm
 from geonode.base.models import TopicCategory
-from .tasks import delete_map
+from geonode.tasks.deletion import delete_map
 from geonode.groups.models import GroupProfile
 
 from geonode.documents.models import get_related_documents
@@ -71,7 +71,7 @@ from geonode import geoserver, qgis_server
 from geonode.base.views import batch_modify
 
 from requests.compat import urljoin
-
+from urllib import urlencode, quote_plus
 if check_ogc_backend(geoserver.BACKEND_PACKAGE):
     # FIXME: The post service providing the map_status object
     # should be moved to geonode.geoserver.
@@ -208,7 +208,6 @@ def map_metadata(request, mapid, template='maps/map_metadata.html'):
         new_poc = map_form.cleaned_data['poc']
         new_author = map_form.cleaned_data['metadata_author']
         new_keywords = map_form.cleaned_data['keywords']
-        new_regions = map_form.cleaned_data['regions']
         new_title = strip_tags(map_form.cleaned_data['title'])
         new_abstract = strip_tags(map_form.cleaned_data['abstract'])
         new_category = TopicCategory.objects.get(
@@ -234,40 +233,34 @@ def map_metadata(request, mapid, template='maps/map_metadata.html'):
             if author_form.has_changed and author_form.is_valid():
                 new_author = author_form.save()
 
-        the_map = map_form.instance
         if new_poc is not None and new_author is not None:
+            the_map = map_form.save()
             the_map.poc = new_poc
             the_map.metadata_author = new_author
-        the_map.title = new_title
-        the_map.abstract = new_abstract
-        if new_keywords:
+            the_map.title = new_title
+            the_map.abstract = new_abstract
+            the_map.save()
             the_map.keywords.clear()
             the_map.keywords.add(*new_keywords)
-        if new_regions:
-            the_map.regions.clear()
-            the_map.regions.add(*new_regions)
-        the_map.category = new_category
-        the_map.save()
+            the_map.category = new_category
+            the_map.save()
 
-        if getattr(settings, 'SLACK_ENABLED', False):
-            try:
-                from geonode.contrib.slack.utils import build_slack_message_map, send_slack_messages
-                send_slack_messages(
-                    build_slack_message_map(
-                        "map_edit", the_map))
-            except BaseException:
-                print "Could not send slack message for modified map."
+            if getattr(settings, 'SLACK_ENABLED', False):
+                try:
+                    from geonode.contrib.slack.utils import build_slack_message_map, send_slack_messages
+                    send_slack_messages(
+                        build_slack_message_map(
+                            "map_edit", the_map))
+                except BaseException:
+                    print "Could not send slack message for modified map."
 
-        return HttpResponseRedirect(
-            reverse(
-                'map_detail',
-                args=(
-                    map_obj.id,
-                )))
+            return HttpResponseRedirect(
+                reverse(
+                    'map_detail',
+                    args=(
+                        map_obj.id,
+                    )))
 
-    # - POST Request Ends here -
-
-    # Request.GET
     if poc is None:
         poc_form = ProfileForm(request.POST, prefix="poc")
     else:
@@ -682,6 +675,8 @@ def clean_config(conf):
     else:
         return conf
 
+def map_print(request, mapid=None, template='maps/map_print.html', snapshot=None):
+    return render_to_response(template, RequestContext(request, {}))
 
 def new_map(request, template='maps/map_new.html'):
     config = new_map_config(request)
@@ -983,7 +978,8 @@ def map_download(request, mapid, template='maps/map_download.html'):
             return redirect(url)
 
         # the path to geoserver backend continue here
-        resp, content = http_client.request(url, 'POST', layers=mapJson)
+        #resp, content = http_client.request(url, 'POST', body=quote_plus(mapJson))
+        resp, content = http_client.request(url, 'POST', body=mapJson)
 
         status = int(resp.status)
 
@@ -991,9 +987,11 @@ def map_download(request, mapid, template='maps/map_download.html'):
             map_status = json.loads(content)
             request.session["map_status"] = map_status
         else:
+            #map_status = json.loads(content)
+            #request.session["map_status"] = map_status
             raise Exception(
-                'Could not start the download of %s. Error was: %s' %
-                (map_obj.title, content))
+                'Could not start the download of %s. Error was: %s///%s' %
+                (status, map_obj.layer_set.all(), mapJson))
 
     locked_layers = []
     remote_layers = []
@@ -1004,15 +1002,14 @@ def map_download(request, mapid, template='maps/map_download.html'):
             if not lyr.local:
                 remote_layers.append(lyr)
             else:
-                ownable_layer = Layer.objects.get(alternate=lyr.name)
+                ownable_layer = Layer.objects.get(typename=lyr.name)
                 if not request.user.has_perm(
                         'download_resourcebase',
                         obj=ownable_layer.get_self_resource()):
                     locked_layers.append(lyr)
                 else:
                     # we need to add the layer only once
-                    if len(
-                            [l for l in downloadable_layers if l.name == lyr.name]) == 0:
+                    if len([l for l in downloadable_layers if l.typename == lyr.name]) == 0:
                         downloadable_layers.append(lyr)
 
     return render_to_response(template, RequestContext(request, {
@@ -1127,8 +1124,7 @@ def snapshot_config(snapshot, map_obj, user, access_token):
         return None
 
     # Set up the proper layer configuration
-    # def snaplayer_config(layer, sources, user):
-    def snaplayer_config(layer, sources, user, access_token):
+    def snaplayer_config(layer, sources, user):
         cfg = layer.layer_config()
         src_cfg = layer.source_config()
         source = snapsource_lookup(src_cfg, sources)
@@ -1163,8 +1159,7 @@ def snapshot_config(snapshot, map_obj, user, access_token):
             snaplayer_config(
                 l,
                 sources,
-                user,
-                access_token) for l in maplayers]
+                user) for l in maplayers]
     else:
         config = map_obj.viewer_json(user, access_token)
     return config

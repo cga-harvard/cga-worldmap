@@ -27,11 +27,7 @@ class Command(BaseCommand):
 
     can_import_settings = True
 
-    def add_arguments(self, parser):
-        parser.add_argument('name')
-        parser.add_argument('domain')
-
-    def handle(self, *args, **options):
-        if len(options) < 2:
+    def handle(self, *args, **kwargs):
+        if len(args) < 2:
             raise Exception('Adding site requires name and site')
-        add_site(options['name'], options['domain'])
+        add_site(args[0], args[1])

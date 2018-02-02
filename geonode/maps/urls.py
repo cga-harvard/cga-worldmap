@@ -38,6 +38,7 @@ if check_ogc_backend(geoserver.BACKEND_PACKAGE):
     map_edit = 'map_edit'
     map_json = 'map_json'
     map_thumbnail = 'map_thumbnail'
+    map_print = 'map_print'
 
 elif check_ogc_backend(qgis_server.BACKEND_PACKAGE):
     from geonode.maps.qgis_server_views import MapCreateView, \
@@ -48,13 +49,14 @@ elif check_ogc_backend(qgis_server.BACKEND_PACKAGE):
     map_embed = MapEmbedView.as_view()
 
     from geonode.maps.qgis_server_views import map_download_qlr, \
-        map_download_leaflet, set_thumbnail_map
+        map_download_leaflet, set_thumbnail_map, qgis_server_map_print
 
     map_download_qlr = map_download_qlr
     map_download_leaflet = map_download_leaflet
     map_edit = MapEditView.as_view()
     map_json = MapUpdateView.as_view()
     map_thumbnail = set_thumbnail_map
+    map_print = qgis_server_map_print
 
 urlpatterns = patterns(
     'geonode.maps.views',
@@ -67,6 +69,7 @@ urlpatterns = patterns(
     url(r'^new/data$', 'new_map_json', name='new_map_json'),
     url(r'^checkurl/?$', 'ajax_url_lookup'),
     url(r'^snapshot/create/?$', 'snapshot_create'),
+    url(r'^print/?$', map_print, name='map_print'),
     url(r'^(?P<mapid>[^/]+)$', 'map_detail', name='map_detail'),
     url(r'^(?P<mapid>[^/]+)/view$', existing_map_view, name='map_view'),
     url(r'^(?P<mapid>[^/]+)/edit$', map_edit, name='map_edit'),

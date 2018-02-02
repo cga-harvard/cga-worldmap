@@ -22,7 +22,6 @@ from __future__ import print_function
 from datetime import datetime, timedelta
 
 import os
-import pytz
 from xml.etree.ElementTree import fromstring
 import json
 import xmljson
@@ -140,7 +139,7 @@ class RequestsTestCase(TestCase):
         q = requests.order_by('created')
         c.process_requests(self.service, requests, q.last().created, q.first().created)
         interval = self.service.check_interval
-        now = datetime.utcnow().replace(tzinfo=pytz.utc)
+        now = datetime.now()
 
         valid_from = now - (2*interval)
         valid_to = now
@@ -180,7 +179,7 @@ class MonitoringUtilsTestCase(TestCase):
 
         periods = list(generate_periods(start, interval, end))
         self.assertEqual(expected_periods, periods)
-        pnow = datetime.utcnow().replace(tzinfo=pytz.utc)
+        pnow = datetime.now()
         start_for_one = pnow - interval
         periods = list(generate_periods(start_for_one, interval, pnow))
         self.assertEqual(len(periods), 1)
@@ -227,7 +226,7 @@ class MonitoringChecksTestCase(TestCase):
         self.u2.save()
 
     def test_monitoring_checks(self):
-        start = datetime.utcnow().replace(tzinfo=pytz.utc)
+        start = datetime.now()
         start_aligned = align_period_start(start, self.service.check_interval)
         end_aligned = start_aligned + self.service.check_interval
         # sanity check
@@ -319,7 +318,7 @@ class MonitoringChecksTestCase(TestCase):
 
     def test_notifications_views(self):
 
-        start = datetime.utcnow().replace(tzinfo=pytz.utc)
+        start = datetime.now()
         start_aligned = align_period_start(start, self.service.check_interval)
         end_aligned = start_aligned + self.service.check_interval
 
@@ -370,7 +369,7 @@ class MonitoringChecksTestCase(TestCase):
 
     def test_notifications_edit_views(self):
 
-        start = datetime.utcnow().replace(tzinfo=pytz.utc)
+        start = datetime.now()
         start_aligned = align_period_start(start, self.service.check_interval)
         end_aligned = start_aligned + self.service.check_interval
 
@@ -450,7 +449,7 @@ class MonitoringChecksTestCase(TestCase):
 
     def test_notifications_api(self):
         capi = CollectorAPI()
-        start = datetime.utcnow().replace(tzinfo=pytz.utc)
+        start = datetime.now()
 
         start_aligned = align_period_start(start, self.service.check_interval)
         end_aligned = start_aligned + self.service.check_interval

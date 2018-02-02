@@ -18,10 +18,11 @@
 #
 #########################################################################
 
-
+import urllib
+import urlparse
 import logging
 import uuid
-
+import re
 from django.conf import settings
 from django.db import models
 from django.db.models import signals
@@ -30,7 +31,7 @@ try:
 except ImportError:
     from django.utils import simplejson as json
 from django.contrib.contenttypes.models import ContentType
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ugettext as _
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.template.defaultfilters import slugify
@@ -45,9 +46,31 @@ from geonode.utils import layer_from_viewer_config
 from geonode.utils import default_map_config
 from geonode.utils import num_encode
 from geonode.security.models import remove_object_permissions
+from geonode.maps.encode import despam, XssCleaner
 from agon_ratings.models import OverallRating
 
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
+
 logger = logging.getLogger("geonode.maps.models")
+ows_sub = re.compile(r"[&\?]+SERVICE=WMS|[&\?]+REQUEST=GetCapabilities", re.IGNORECASE)
+DEFAULT_CONTENT=_(
+    "<h4>About Us</h4><p>\
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\
+    A large amount of geographical information which is closely related to human activities exists in the <br>\
+    brilliant human civilization, numerous documents since ancient times, as well as the vast land and ocean. <br>\
+    For example, the geographical distribution of individuals, the traces and the social relations for a single <br>\
+    person, the migration of a group, as well as the existence, distribution and change of a region and <br>\
+    trajectory for non-living things; as for a place, it also contains the people, events, things and other <br>\
+    geographical information in previous time.</p>\
+    <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\
+    The Academic Map Publishing Platform, established by Zhejiang University and Harvard University <br>\
+    together, is not only an integrated database providing multi-functional query services, but also a display <br>\
+    platform ready for users to present their research productions about geographic information and visualize <br>\
+    analysis and select. The big data formed by the platform, will greatly contribute to future scientific <br>\
+    research, overnment decision-making and social services.</p>"
+    )
 
 class Map(ResourceBase, GXPMapBase):
 
@@ -79,6 +102,7 @@ class Map(ResourceBase, GXPMapBase):
     urlsuffix = models.CharField(_('Site URL'), max_length=255, blank=True)
     # Alphanumeric alternative to referencing maps by id, appended to end of
     # URL instead of id, ie http://domain/maps/someview
+    content_map = models.TextField(_('Site Content'), blank=True, null=True, default=DEFAULT_CONTENT)
 
     featuredurl = models.CharField(
         _('Featured Map URL'),
@@ -143,7 +167,7 @@ class Map(ResourceBase, GXPMapBase):
         def layer_json(lyr):
             return {
                 "name": lyr.alternate,
-                "service": lyr.service_type if hasattr(lyr, 'service_type') else "QGIS Server",
+                "service": lyr.service_type,
                 "serviceURL": "",
                 "metadataURL": ""
             }
@@ -168,9 +192,9 @@ class Map(ResourceBase, GXPMapBase):
 
         self.title = conf['about']['title']
         self.abstract = conf['about']['abstract']
-	# self.urlsuffix = conf['about']['urlsuffix']
-	# x = XssCleaner()
-    #     self.content_map = despam(x.strip(conf['about']['introtext']))
+	self.urlsuffix = conf['about']['urlsuffix']
+	x = XssCleaner()
+        self.content_map = despam(x.strip(conf['about']['introtext']))
         self.set_bounds_from_center_and_zoom(
             conf['map']['center'][0],
             conf['map']['center'][1],
@@ -458,52 +482,52 @@ class MapLayer(models.Model, GXPLayerBase):
 
     local = models.BooleanField(default=False)
     # True if this layer is served by the local geoserver
-    # def source_config(self,access_token=None):
-    #     """
-    #     Generate a dict that can be serialized to a GXP layer source
-    #     configuration suitable for loading this layer.
-    #     """
-    #     try:
-    #         cfg = json.loads(self.source_params)
-    #     except Exception:
-    #         cfg = dict(ptype = "gxp_gnsource", restUrl="/gs/rest")
-    #
-    #     if self.ows_url:
-    #         cfg["url"] = ows_sub.sub('',self.ows_url)
-    #         if "ptype" not in cfg:
-    #             cfg["ptype"] = "gxp_wmscsource"
-    #
-    #     if "ptype" in cfg and cfg["ptype"] == "gxp_gnsource":
-    #         cfg["restUrl"] = "/gs/rest"
-    #
-	# if self.ows_url:
-    #         '''
-    #         This limits the access token we add to only the OGC servers decalred in OGC_SERVER.
-    #         Will also override any access_token in the request and replace it with an existing one.
-    #         '''
-    #         urls = []
-    #         for name, server in settings.OGC_SERVER.iteritems():
-    #             url = urlparse.urlsplit(server['PUBLIC_LOCATION'])
-    #             urls.append(url.netloc)
-    #
-    #         my_url = urlparse.urlsplit(self.ows_url)
-    #
-    #         if access_token and my_url.netloc in urls:
-    #             request_params = urlparse.parse_qs(my_url.query)
-    #             if 'access_token' in request_params:
-    #                 del request_params['access_token']
-    #             request_params['access_token'] = [access_token]
-    #             encoded_params = urllib.urlencode(request_params, doseq=True)
-    #
-    #             parsed_url = urlparse.SplitResult(my_url.scheme, my_url.netloc, my_url.path,
-    #                                               encoded_params, my_url.fragment)
-    #             cfg["url"] = parsed_url.geturl()
-    #         else:
-    #             cfg["url"] = self.ows_url
-    #
-    #
-    #
-	# return cfg
+    def source_config(self,access_token=None):
+        """
+        Generate a dict that can be serialized to a GXP layer source
+        configuration suitable for loading this layer.
+        """
+        try:
+            cfg = json.loads(self.source_params)
+        except Exception:
+            cfg = dict(ptype = "gxp_gnsource", restUrl="/gs/rest")
+
+        if self.ows_url:
+            cfg["url"] = ows_sub.sub('',self.ows_url)
+            if "ptype" not in cfg:
+                cfg["ptype"] = "gxp_wmscsource"
+
+        if "ptype" in cfg and cfg["ptype"] == "gxp_gnsource":
+            cfg["restUrl"] = "/gs/rest"
+       
+	if self.ows_url:
+            '''
+            This limits the access token we add to only the OGC servers decalred in OGC_SERVER.
+            Will also override any access_token in the request and replace it with an existing one.
+            '''
+            urls = []
+            for name, server in settings.OGC_SERVER.iteritems():
+                url = urlparse.urlsplit(server['PUBLIC_LOCATION'])
+                urls.append(url.netloc)
+
+            my_url = urlparse.urlsplit(self.ows_url)
+
+            if access_token and my_url.netloc in urls:
+                request_params = urlparse.parse_qs(my_url.query)
+                if 'access_token' in request_params:
+                    del request_params['access_token']
+                request_params['access_token'] = [access_token]
+                encoded_params = urllib.urlencode(request_params, doseq=True)
+
+                parsed_url = urlparse.SplitResult(my_url.scheme, my_url.netloc, my_url.path,
+                                                  encoded_params, my_url.fragment)
+                cfg["url"] = parsed_url.geturl()
+            else:
+                cfg["url"] = self.ows_url 
+
+	
+		
+	return cfg
 
     def layer_config(self, user=None):
         # Try to use existing user-specific cache of layer config
