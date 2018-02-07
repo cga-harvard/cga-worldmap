@@ -1114,7 +1114,7 @@ geonode (2.5.4+thefinal0) xenial; urgency=high
   * [0fd256]  - Fix the docs
 
   [ travislbrundage ]
-  * [a6dd4c] Updating Choose Files button to allow user to reupload the same file again without having to use Clear (#2681)
+  * [a6dd4c] Updating {% trans "Choose Files" %} button to allow user to reupload the same file again without having to use Clear (#2681)
   * [89224c] Use new UserActivity view (#2680)
 
   [ Sasha Hart ]

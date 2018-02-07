@@ -289,9 +289,8 @@ def fixup_style(cat, resource, style):
             else:
                 sld = style.read()
             logger.info("Creating style [%s]", name)
-            style = cat.create_style(name, sld, overwrite=True, raw=True, workspace=settings.DEFAULT_WORKSPACE)
-            style = cat.get_style(name, workspace=settings.DEFAULT_WORKSPACE) or cat.get_style(name)
-            lyr.default_style = style
+            style = cat.create_style(name, sld, overwrite=True, raw=True)
+            lyr.default_style = cat.get_style(name)
             logger.info("Saving changes to %s", lyr)
             cat.save(lyr)
 
@@ -310,11 +309,17 @@ def cascading_delete(cat, layer_name):
             try:
                 store = get_store(cat, name, workspace=ws)
             except FailedRequestError:
-                try:
-                    layer = Layer.objects.get(alternate=layer_name)
-                    store = get_store(cat, layer.store, workspace=ws)
-                except FailedRequestError:
-                    logger.debug('the store was not found in geoserver')
+                if ogc_server_settings.DATASTORE:
+                    try:
+                        layer = Layer.objects.get(alternate=layer_name)
+                        store = get_store(cat, layer.store, workspace=ws)
+                    except FailedRequestError:
+                        logger.debug(
+                            'the store was not found in geoserver')
+                        return
+                else:
+                    logger.debug(
+                        'the store was not found in geoserver')
                     return
             if ws is None:
                 logger.debug(
@@ -827,8 +832,7 @@ def set_styles(layer, gs_catalog):
     if gs_layer.default_style:
         default_style = gs_layer.default_style
     else:
-        default_style = gs_catalog.get_style(layer.name, workspace=settings.DEFAULT_WORKSPACE) \
-                        or gs_catalog.get_style(layer.name)
+        default_style = gs_catalog.get_style(layer.name)
         try:
             gs_layer.default_style = default_style
             gs_catalog.save(gs_layer)
@@ -1124,8 +1128,7 @@ def geoserver_upload(
     # Get a short handle to the gsconfig geoserver catalog
     cat = gs_catalog
 
-    # Ahmed Nour: get workspace by name instead of get default one.
-    workspace = cat.get_workspace(settings.DEFAULT_WORKSPACE)
+    workspace = cat.get_default_workspace()
     # Check if the store exists in geoserver
     try:
         store = get_store(cat, name, workspace=workspace)
@@ -1268,9 +1271,9 @@ def geoserver_upload(
     style = None
     if sld is not None:
         try:
-            style = cat.get_style(name, workspace=settings.DEFAULT_WORKSPACE) or cat.get_style(name)
+            style = cat.get_style(name)
             overwrite = style or False
-            cat.create_style(name, sld, overwrite=overwrite, raw=True, workspace=settings.DEFAULT_WORKSPACE)
+            cat.create_style(name, sld, overwrite=overwrite, raw=True)
         except geoserver.catalog.ConflictingDataError as e:
             msg = ('There was already a style named %s in GeoServer, '
                    'try to use: "%s"' % (name + "_layer", str(e)))
@@ -1284,26 +1287,22 @@ def geoserver_upload(
 
         if style is None:
             try:
-                style = cat.get_style(name, workspace=settings.DEFAULT_WORKSPACE) or cat.get_style(name)
+                style = cat.get_style(name)
                 overwrite = style or False
-                cat.create_style(name, sld, overwrite=overwrite, raw=True, workspace=settings.DEFAULT_WORKSPACE)
+                cat.create_style(name, sld, overwrite=overwrite, raw=True)
             except:
                 try:
-                    style = cat.get_style(name + '_layer', workspace=settings.DEFAULT_WORKSPACE) or \
-                            cat.get_style(name + '_layer')
+                    style = cat.get_style(name + '_layer')
                     overwrite = style or False
-                    cat.create_style(name + '_layer', sld, overwrite=overwrite, raw=True,
-                                     workspace=settings.DEFAULT_WORKSPACE)
-                    style = cat.get_style(name + '_layer', workspace=settings.DEFAULT_WORKSPACE) or \
-                        cat.get_style(name + '_layer')
+                    cat.create_style(name + '_layer', sld, overwrite=overwrite, raw=True)
+                    style = cat.get_style(name + '_layer')
                 except geoserver.catalog.ConflictingDataError as e:
                     msg = ('There was already a style named %s in GeoServer, '
                            'cannot overwrite: "%s"' % (name, str(e)))
                     logger.warn(msg)
                     e.args = (msg,)
 
-                style = cat.get_style(name + "_layer", workspace=settings.DEFAULT_WORKSPACE) or \
-                    cat.get_style(name + "_layer")
+                style = cat.get_style(name + "_layer")
                 if style is None:
                     style = cat.get_style('point')
                     msg = ('Could not find any suitable style in GeoServer '
@@ -1671,10 +1670,7 @@ def style_update(request, url):
                 affected_layers.append(layer)
 
         # Invalidate GeoWebCache so it doesn't retain old style in tiles
-        try:
-            _invalidate_geowebcache_layer(layer_name)
-        except:
-            pass
+        _invalidate_geowebcache_layer(layer_name)
 
     elif request.method == 'DELETE':  # delete style from GN
         style_name = os.path.basename(request.path)

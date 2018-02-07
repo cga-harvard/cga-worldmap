@@ -19,7 +19,6 @@
 #########################################################################
 
 import logging
-import pytz
 
 from datetime import datetime
 from django.conf import settings
@@ -88,8 +87,7 @@ class MonitoringMiddleware(object):
             del request._monitoring
 
     def process_request(self, request):
-        utc = pytz.utc
-        now = datetime.utcnow().replace(tzinfo=utc)
+        now = datetime.now()
         meta = {'started': now,
                 'resources': {},
                 'finished': None}
@@ -104,8 +102,7 @@ class MonitoringMiddleware(object):
         m = getattr(request, '_monitoring', None)
         if m is None:
             return response
-        utc = pytz.utc
-        now = datetime.utcnow().replace(tzinfo=utc)
+        now = datetime.now()
         m['finished'] = now
         self.register_request(request, response)
         return response
@@ -114,7 +111,6 @@ class MonitoringMiddleware(object):
         m = getattr(request, '_monitoring', None)
         if m is None:
             return
-        utc = pytz.utc
-        now = datetime.utcnow().replace(tzinfo=utc)
+        now = datetime.now()
         m['finished'] = now
         self.register_exception(request, exception)

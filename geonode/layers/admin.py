@@ -41,6 +41,7 @@ class LayerAdmin(MediaTranslationAdmin):
     list_display = (
         'id',
         'alternate',
+        'service_type',
         'title',
         'date',
         'category',

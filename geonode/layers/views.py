@@ -60,6 +60,7 @@ from django.db import transaction
 from django.db.models import F
 from django.forms.utils import ErrorList
 
+from geonode.tasks.deletion import delete_layer
 from geonode.services.models import Service
 from geonode.layers.forms import LayerForm, LayerUploadForm, NewLayerUploadForm, LayerAttributeForm
 from geonode.base.forms import CategoryForm, TKeywordForm
@@ -83,7 +84,6 @@ from geonode.maps.models import Map
 from geonode.geoserver.helpers import (cascading_delete, gs_catalog,
                                        ogc_server_settings, save_style,
                                        extract_name_from_sld, _invalidate_geowebcache_layer)
-from .tasks import delete_layer
 
 if check_ogc_backend(geoserver.BACKEND_PACKAGE):
     from geonode.geoserver.helpers import _render_thumbnail
@@ -162,7 +162,6 @@ def layer_upload(request, template='upload/layer_upload.html'):
     elif request.method == 'POST':
         form = NewLayerUploadForm(request.POST, request.FILES)
         tempdir = None
-        saved_layer = None
         errormsgs = []
         out = {'success': False}
         if form.is_valid():
@@ -221,9 +220,8 @@ def layer_upload(request, template='upload/layer_upload.html'):
                     layer = cat.get_layer(title)
                     if match is None:
                         try:
-                            cat.create_style(saved_layer.name, sld, raw=True, workspace=settings.DEFAULT_WORKSPACE)
-                            style = cat.get_style(saved_layer.name, workspace=settings.DEFAULT_WORKSPACE) or \
-                                cat.get_style(saved_layer.name)
+                            cat.create_style(saved_layer.name, sld, raw=True)
+                            style = cat.get_style(saved_layer.name)
                             if layer and style:
                                 layer.default_style = style
                                 cat.save(layer)
@@ -231,14 +229,11 @@ def layer_upload(request, template='upload/layer_upload.html'):
                         except Exception as e:
                             logger.exception(e)
                     else:
-                        style = cat.get_style(saved_layer.name, workspace=settings.DEFAULT_WORKSPACE) or \
-                            cat.get_style(saved_layer.name)
+                        style = cat.get_style(saved_layer.name)
                         # style.update_body(sld)
                         try:
-                            cat.create_style(saved_layer.name, sld, overwrite=True, raw=True,
-                                             workspace=settings.DEFAULT_WORKSPACE)
-                            style = cat.get_style(saved_layer.name, workspace=settings.DEFAULT_WORKSPACE) or \
-                                cat.get_style(saved_layer.name)
+                            cat.create_style(saved_layer.name, sld, overwrite=True, raw=True)
+                            style = cat.get_style(saved_layer.name)
                             if layer and style:
                                 layer.default_style = style
                                 cat.save(layer)
@@ -653,11 +648,9 @@ def layer_metadata(
         else llbbox_to_mercator([float(coord) for coord in bbox])
     config["title"] = layer.title
     config["queryable"] = True
-
-    show_gazetteer_form = settings.USE_WORLDMAP
-    # TODO remove this hack before PR vs GeoNode
     # hack needed to see if the layer is in Postgres (otherwise no gazetteer):
     # all PostGIS stores starts with wm. There is also a dataverse postgres database
+    show_gazetteer_form = settings.USE_GAZETTEER
     if layer.store[:2] != 'wm' and layer.store != 'dataverse':
     	show_gazetteer_form = False
 
@@ -805,8 +798,7 @@ def layer_metadata(
             la.attribute_label = form["attribute_label"]
             la.visible = form["visible"]
             la.display_order = form["display_order"]
-            if settings.USE_WORLDMAP:
-                la.searchable = form["searchable"]
+            la.searchable = form["searchable"]
             la.save()
 
         if new_poc is not None or new_author is not None:
@@ -820,13 +812,13 @@ def layer_metadata(
             layer.keywords.clear()
             layer.keywords.add(*new_keywords)
 
-        new_regions = [x.strip() for x in layer_form.cleaned_data['regions']]
-        if new_regions is not None:
-            layer.regions.clear()
-            layer.regions.add(*new_regions)
-
-        the_layer = layer_form.instance
-        the_layer.save()
+        try:
+            the_layer = layer_form.save()
+        except BaseException:
+            tb = traceback.format_exc()
+            if tb:
+                logger.debug(tb)
+            the_layer = layer
 
         up_sessions = UploadSession.objects.filter(layer=the_layer.id)
         if up_sessions.count() > 0 and up_sessions[0].user != the_layer.owner:

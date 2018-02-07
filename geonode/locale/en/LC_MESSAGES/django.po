@@ -5284,6 +5284,23 @@ msgstr "Invalid permission level."
 msgid "Permission Denied"
 msgstr "Permission Denied"
 
+#: geonode/utils.py:67 geonode/maps/models.py:58
+msgid "<h4>About Us</h4><p>\
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\
+    A large amount of geographical information which is closely related to human activities exists in the <br>\
+    brilliant human civilization, numerous documents since ancient times, as well as the vast land and ocean. <br>\
+    For example, the geographical distribution of individuals, the traces and the social relations for a single <br>\
+    person, the migration of a group, as well as the existence, distribution and change of a region and <br>\
+    trajectory for non-living things; as for a place, it also contains the people, events, things and other <br>\
+    geographical information in previous time.</p>\
+    <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\
+    The Academic Map Publishing Platform, established by Zhejiang University and Harvard University <br>\
+    together, is not only an integrated database providing multi-functional query services, but also a display <br>\
+    platform ready for users to present their research productions about geographic information and visualize <br>\
+    analysis and select. The big data formed by the platform, will greatly contribute to future scientific <br>\
+    research, overnment decision-making and social services.</p>"
+msgstr ""
+
 #~ msgid "UWI GeoNode"
 #~ msgstr "UWI GeoNode"
 

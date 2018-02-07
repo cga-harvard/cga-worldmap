@@ -26,8 +26,7 @@ from .api import api
 from .views import site_layer_detail, site_document_detail, site_map_detail, layer_acls, \
         ajax_login, ajax_lookup, SiteLoginView
 
-from geonode.geoserver import views
-from geonode.layers import views as layers_views
+from geoserver import views
 
 # flake8: noqa
 urlpatterns = [
@@ -57,7 +56,7 @@ urlpatterns = [
     ),
     url(
         r'^layers/upload$',
-        layers_views.layer_upload,
+        views.layer_upload,
         name='layer_upload'
     ),
     url(

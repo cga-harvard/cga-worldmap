@@ -14,7 +14,9 @@
 
 {% block body_outer %}
 <div class="page-header">
-  <a href="{% url "layer_browse" %}?limit={{ CLIENT_RESULTS_LIMIT }}" class="btn btn-primary pull-right">{% trans "Explore Layers" %}</a>
+
+  <a href="{% url "layer_browse" %}?limit={{ API_LIMIT_PER_PAGE }}" class="btn btn-primary pull-right">{% trans "Explore Layers" %}</a>
+
   <h2 class="page-title">{% trans "Upload Layers" %}</h2>
 
   <script language="javascript">
@@ -78,7 +80,7 @@
     <form id="file-uploader" method="post" enctype="multipart/form-data">
       <!-- UI change to hide the list of previously uploaded files from the user -->
       <input type="file" id="file-input" style="display: none;" multiple>
-      <input class="btn btn-default" type="button" value="Choose Files" onclick="document.getElementById('file-input').click();">
+      <input class="btn btn-default" type="button" value="{% trans "Choose Files" %}" onclick="document.getElementById('file-input').click();">
     </form>
 
     <section class="widget">

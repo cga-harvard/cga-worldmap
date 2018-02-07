@@ -36,7 +36,7 @@ from urlparse import urljoin, urlsplit
 from django.db import models
 from django.core import serializers
 from django.db.models import Q, signals
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ugettext as _
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.contrib.staticfiles.templatetags import staticfiles
@@ -137,7 +137,6 @@ class TopicCategory(models.Model):
 
     def __unicode__(self):
         return u"{0}".format(self.gn_description)
-
     class Meta:
         ordering = ("identifier",)
         verbose_name_plural = 'Metadata Topic Categories'
@@ -320,7 +319,7 @@ class HierarchicalKeyword(TagBase, MP_Node):
             serobj = serializers.serialize('python', [pyobj])[0]
             # django's serializer stores the attributes in 'fields'
             fields = serobj['fields']
-            depth = fields['depth'] or 1
+            depth = fields['depth']
             fields['text'] = fields['name']
             fields['href'] = fields['slug']
             del fields['name']
@@ -382,9 +381,9 @@ class _HierarchicalTagManager(_TaggableManager):
             name__in=str_tags
         )
         tag_objs.update(existing)
+
         for new_tag in str_tags - set(t.name for t in existing):
-            if new_tag:
-                tag_objs.add(HierarchicalKeyword.add_root(name=new_tag))
+            tag_objs.add(HierarchicalKeyword.add_root(name=new_tag))
 
         for tag in tag_objs:
             try:

@@ -343,13 +343,15 @@ class MapEmbedView(DetailView):
             config = snapshot_config(snapshot, map_obj, request.user,
                                      access_token)
         # list all required layers
+        layers = Layer.objects.all()
         map_layers = MapLayer.objects.filter(
             map_id=mapid).order_by('stack_order')
         context = {
             'config': json.dumps(config),
             'create': False,
+            'layers': layers,
             'resource': map_obj,
-            'layers': map_layers,
+            'map_layers': map_layers,
             'preview': getattr(
                 settings,
                 'LAYER_PREVIEW_LIBRARY',
