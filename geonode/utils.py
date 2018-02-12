@@ -28,6 +28,11 @@ import re
 import uuid
 import subprocess
 import select
+import tempfile
+import tarfile
+
+from zipfile import ZipFile, is_zipfile
+
 from StringIO import StringIO
 
 from osgeo import ogr
@@ -57,8 +62,56 @@ try:
 except ImportError:
     from django.utils import simplejson as json
 
+# DEFAULT_URL = ""
 DEFAULT_TITLE = ""
 DEFAULT_ABSTRACT = ""
+# DEFAULT_CONTENT=(
+#     '<h3>The Harvard WorldMap Project</h3>\
+#   <p>WorldMap is an open source web mapping system that is currently\
+#   under construction. It is built to assist academic research and\
+#   teaching as well as the general public and supports discovery,\
+#   investigation, analysis, visualization, communication and archiving\
+#   of multi-disciplinary, multi-source and multi-format data,\
+#   organized spatially and temporally.</p>\
+#   <p>The first instance of WorldMap, focused on the continent of\
+#   Africa, is called AfricaMap. Since its beta release in November of\
+#   2008, the framework has been implemented in several geographic\
+#   locations with different research foci, including metro Boston,\
+#   East Asia, Vermont, Harvard Forest and the city of Paris. These web\
+#   mapping applications are used in courses as well as by individual\
+#   researchers.</p>\
+#   <h3>Introduction to the WorldMap Project</h3>\
+#   <p>WorldMap solves the problem of discovering where things happen.\
+#   It draws together an array of public maps and scholarly data to\
+#   create a common source where users can:</p>\
+#   <ol>\
+#   <li>Interact with the best available public data for a\
+#   city/region/continent</li>\
+#   <li>See the whole of that area yet also zoom in to particular\
+#   places</li>\
+#   <li>Accumulate both contemporary and historical data supplied by\
+#   researchers and make it permanently accessible online</li>\
+#   <li>Work collaboratively across disciplines and organizations with\
+#   spatial information in an online environment</li>\
+#   </ol>\
+#   <p>The WorldMap project aims to accomplish these goals in stages,\
+#   with public and private support. It draws on the basic insight of\
+#   geographic information systems that spatiotemporal data becomes\
+#   more meaningful as more "layers" are added, and makes use of tiling\
+#   and indexing approaches to facilitate rapid search and\
+#   visualization of large volumes of disparate data.</p>\
+#   <p>WorldMap aims to augment existing initiatives for globally\
+#   sharing spatial data and technology such as <a target="_blank" href="http://www.gsdi.org/">GSDI</a> (Global Spatial Data\
+#   Infrastructure).WorldMap makes use of <a target="_blank" href="http://www.opengeospatial.org/">OGC</a> (Open Geospatial\
+#   Consortium) compliant web services such as <a target="_blank" href="http://en.wikipedia.org/wiki/Web_Map_Service">WMS</a> (Web\
+#   Map Service), emerging open standards such as <a target="_blank" href="http://wiki.osgeo.org/wiki/Tile_Map_Service_Specification">WMS-C</a>\
+#   (cached WMS), and standards-based metadata formats, to enable\
+#   WorldMap data layers to be inserted into existing data\
+#   infrastructures.&nbsp;<br>\
+#   <br>\
+#   All WorldMap source code will be made available as <a target="_blank" href="http://www.opensource.org/">Open Source</a> for others to use\
+#   and improve upon.</p>'
+# )
 
 INVALID_PERMISSION_MESSAGE = _("Invalid permission level.")
 
@@ -88,6 +141,40 @@ signals_store = {}
 id_none = id(None)
 
 logger = logging.getLogger("geonode.utils")
+
+
+def unzip_file(upload_file, extension='.shp', tempdir=None):
+    """
+    Unzips a zipfile into a temporary directory and returns the full path of the .shp file inside (if any)
+    """
+    absolute_base_file = None
+    if tempdir is None:
+        tempdir = tempfile.mkdtemp()
+
+    the_zip = ZipFile(upload_file)
+    the_zip.extractall(tempdir)
+    for item in the_zip.namelist():
+        if item.endswith(extension):
+            absolute_base_file = os.path.join(tempdir, item)
+
+    return absolute_base_file
+
+
+def extract_tarfile(upload_file, extension='.shp', tempdir=None):
+    """
+    Extracts a tarfile into a temporary directory and returns the full path of the .shp file inside (if any)
+    """
+    absolute_base_file = None
+    if tempdir is None:
+        tempdir = tempfile.mkdtemp()
+
+    the_tar = tarfile.open(upload_file)
+    the_tar.extractall(tempdir)
+    for item in the_tar.getnames():
+        if item.endswith(extension):
+            absolute_base_file = os.path.join(tempdir, item)
+
+    return absolute_base_file
 
 
 def _get_basic_auth_info(request):
@@ -351,7 +438,9 @@ class GXPMapBase(object):
             'id': self.id,
             'about': {
                 'title': self.title,
-                'abstract': self.abstract
+                'abstract': self.abstract,
+                # 'introtext' : self.content_map,
+                # 'urlsuffix': self.urlsuffix
             },
             'aboutUrl': '../about',
             'defaultSourceType': "gxp_wmscsource",
@@ -388,10 +477,12 @@ class GXPMap(GXPMapBase):
 
     def __init__(self, projection=None, title=None, abstract=None,
                  center_x=None, center_y=None, zoom=None):
+                 # center_x=None, center_y=None, zoom=None, content_map=None,urlsuffix=None):
         self.id = 0
         self.projection = projection
         self.title = title or DEFAULT_TITLE
         self.abstract = abstract or DEFAULT_ABSTRACT
+        # self.content_map = content_map or DEFAULT_CONTENT
         _DEFAULT_MAP_CENTER = forward_mercator(settings.DEFAULT_MAP_CENTER)
         self.center_x = center_x if center_x is not None else _DEFAULT_MAP_CENTER[
             0]
@@ -399,6 +490,7 @@ class GXPMap(GXPMapBase):
             1]
         self.zoom = zoom if zoom is not None else settings.DEFAULT_MAP_ZOOM
         self.layers = []
+        # self.urlsuffix=urlsuffix or DEFAULT_URL
 
 
 class GXPLayerBase(object):
@@ -513,7 +605,8 @@ def default_map_config(request):
         projection=getattr(settings, 'DEFAULT_MAP_CRS', 'EPSG:900913'),
         center_x=_DEFAULT_MAP_CENTER[0],
         center_y=_DEFAULT_MAP_CENTER[1],
-        zoom=settings.DEFAULT_MAP_ZOOM
+        # zoom=settings.DEFAULT_MAP_ZOOM,
+        # content_map=DEFAULT_CONTENT
     )
 
     def _baselayer(lyr, order):
@@ -576,11 +669,69 @@ def resolve_object(request, model, query, permission='base.view_resourcebase',
     obj = get_object_or_404(model, **query)
     obj_to_check = obj.get_self_resource()
 
-    if settings.RESOURCE_PUBLISHING:
-        if (not obj_to_check.is_published) and (
-            not request.user.has_perm('publish_resourcebase', obj_to_check)) and (
-                not request.user.has_perm('change_resourcebase_metadata', obj_to_check)):
+    from guardian.shortcuts import assign_perm, get_groups_with_perms
+    from geonode.groups.models import GroupProfile
+
+    groups = get_groups_with_perms(obj_to_check,
+                                   attach_perms=True)
+
+    if obj_to_check.group and obj_to_check.group not in groups:
+        groups[obj_to_check.group] = obj_to_check.group
+
+    obj_group_managers = []
+    obj_group_members = []
+    if groups:
+        for group in groups:
+            try:
+                group_profile = GroupProfile.objects.get(slug=group.name)
+                managers = group_profile.get_managers()
+                if managers:
+                    for manager in managers:
+                        if manager not in obj_group_managers and not manager.is_superuser:
+                            obj_group_managers.append(manager)
+                if group_profile.user_is_member(request.user) and request.user not in obj_group_members:
+                    obj_group_members.append(request.user)
+            except GroupProfile.DoesNotExist:
+                pass
+
+    if settings.RESOURCE_PUBLISHING or settings.ADMIN_MODERATE_UPLOADS:
+        is_admin = False
+        is_manager = False
+        is_owner = True if request.user == obj_to_check.owner else False
+        if request.user:
+            is_admin = request.user.is_superuser if request.user else False
+            try:
+                is_manager = request.user.groupmember_set.all().filter(role='manager').exists()
+            except:
+                is_manager = False
+        else:
             raise Http404
+        if (not obj_to_check.is_published):
+            if not is_admin:
+                if is_owner or (is_manager and request.user in obj_group_managers):
+                    if (not request.user.has_perm('publish_resourcebase', obj_to_check)) and (
+                        not request.user.has_perm('view_resourcebase', obj_to_check)) and (
+                            not request.user.has_perm('change_resourcebase_metadata', obj_to_check)) and (
+                                not is_owner and not settings.ADMIN_MODERATE_UPLOADS):
+                                    raise Http404
+                    else:
+                        assign_perm('view_resourcebase', request.user, obj_to_check)
+                        assign_perm('publish_resourcebase', request.user, obj_to_check)
+                        assign_perm('change_resourcebase_metadata', request.user, obj_to_check)
+                        assign_perm('download_resourcebase', request.user, obj_to_check)
+
+                        if is_owner:
+                            assign_perm('change_resourcebase', request.user, obj_to_check)
+                            assign_perm('delete_resourcebase', request.user, obj_to_check)
+                            assign_perm('change_resourcebase_permissions', request.user, obj_to_check)
+                else:
+                    if request.user in obj_group_members:
+                        if (not request.user.has_perm('publish_resourcebase', obj_to_check)) and (
+                            not request.user.has_perm('view_resourcebase', obj_to_check)) and (
+                                not request.user.has_perm('change_resourcebase_metadata', obj_to_check)):
+                                    raise Http404
+                    else:
+                        raise Http404
 
     allowed = True
     if permission.split('.')[-1] in ['change_layer_data',
@@ -589,9 +740,12 @@ def resolve_object(request, model, query, permission='base.view_resourcebase',
             obj_to_check = obj
     if permission:
         if permission_required or request.method != 'GET':
-            allowed = request.user.has_perm(
-                permission,
-                obj_to_check)
+            if request.user in obj_group_managers:
+                allowed = True
+            else:
+                allowed = request.user.has_perm(
+                    permission,
+                    obj_to_check)
     if not allowed:
         mesg = permission_msg or _('Permission Denied')
         raise PermissionDenied(mesg)
@@ -600,7 +754,7 @@ def resolve_object(request, model, query, permission='base.view_resourcebase',
     return obj
 
 
-def json_response(body=None, errors=None, redirect_to=None, exception=None,
+def json_response(body=None, errors=None, url=None, redirect_to=None, exception=None,
                   content_type=None, status=None):
     """Create a proper JSON response. If body is provided, this is the response.
     If errors is not None, the response is a success/errors json object.
@@ -624,6 +778,11 @@ def json_response(body=None, errors=None, redirect_to=None, exception=None,
         body = {
             'success': True,
             'redirect_to': redirect_to
+        }
+    elif url:
+        body = {
+            'success': True,
+            'url': url
         }
     elif exception:
         if body is None:
@@ -732,10 +891,17 @@ def check_shp_columnnames(layer):
     """
 
     # TODO we may add in a better location this method
+    #if layer.charset is u"":
+    #    layer.charset = unicode('UTF-8');
+
     inShapefile = ''
     for f in layer.upload_session.layerfile_set.all():
         if os.path.splitext(f.file.name)[1] == '.shp':
             inShapefile = f.file.path
+
+    tempdir = tempfile.mkdtemp()
+    if is_zipfile(inShapefile):
+        inShapefile = unzip_file(inShapefile, '.shp', tempdir=tempdir)
 
     inDriver = ogr.GetDriverByName('ESRI Shapefile')
     inDataSource = inDriver.Open(inShapefile, 1)
@@ -1002,6 +1168,50 @@ def run_subprocess(*cmd, **kwargs):
 
     return p.returncode, stdout.getvalue(), stderr.getvalue()
 
+
+# class WorldmapDatabaseRouter(object):
+#     """A router to control all database operations on models in
+#     the gazetteer application"""
+#
+#     apps = ['gazetteer']
+#
+#     def db_for_read(self, model, **hints):
+#         """Point all operations on gazetteer models to gazetteer db"""
+#         if model._meta.app_label in self.apps:
+#             return settings.GAZETTEER_DB_ALIAS
+#         return None
+#
+#     def db_for_write(self, model, **hints):
+#         """Point all operations on gazetteer models to gazetteer db"""
+#         if model._meta.app_label in self.apps:
+#             return settings.GAZETTEER_DB_ALIAS
+#         return None
+#
+#     def allow_relation(self, obj1, obj2, **hints):
+#         """Allow any relation if a model in gazetteer is involved"""
+#         if obj1._meta.app_label in self.apps or obj2._meta.app_label in self.apps:
+#             return True
+#         return None
+#
+#     def allow_syncdb(self, db, model):
+#         """Make sure the gazetteer app only appears on the gazetteer db"""
+#         if model._meta.app_label in ['south']:
+#             return True
+#         if db == settings.GAZETTEER_DB_ALIAS:
+#             return model._meta.app_label in self.apps
+#         elif model._meta.app_label in self.apps:
+#             return False
+#         return None
+#
+#     def allow_migrate(self, db, model):
+#         """Make sure the gazetteer app only appears on the gazetteer db"""
+#         if model._meta.app_label in ['south']:
+#             return True
+#         if db == settings.GAZETTEER_DB_ALIAS:
+#             return model._meta.app_label in self.apps
+#         elif model._meta.app_label in self.apps:
+#             return False
+#         return None
 
 def parse_datetime(value):
     for patt in settings.DATETIME_INPUT_FORMATS:

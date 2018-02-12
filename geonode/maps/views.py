@@ -315,7 +315,7 @@ def map_metadata(request, mapid, template='maps/map_metadata.html'):
     if settings.ADMIN_MODERATE_UPLOADS:
         if not request.user.is_superuser:
             map_form.fields['is_published'].widget.attrs.update({'disabled': 'true'})
-        if not request.user.is_superuser or not request.user.is_staff:
+
             can_change_metadata = request.user.has_perm(
                 'change_resourcebase_metadata',
                 map_obj.get_self_resource())
@@ -1127,6 +1127,7 @@ def snapshot_config(snapshot, map_obj, user, access_token):
         return None
 
     # Set up the proper layer configuration
+    # def snaplayer_config(layer, sources, user):
     def snaplayer_config(layer, sources, user, access_token):
         cfg = layer.layer_config()
         src_cfg = layer.source_config()
