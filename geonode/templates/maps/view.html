@@ -33,7 +33,9 @@ var isMobile = {
 {% include "geonode/app_header.html" %}
 {% include "geonode/geo_header.html" %}
 
-<script src="http://js.nicedit.com/nicEdit-latest.js" type="text/javascript"></script>
+<!-- <script src="http://js.nicedit.com/nicEdit-latest.js" type="text/javascript"></script> -->
+
+<script src="{{ STATIC_URL }}nicEdit-latest.js" type="text/javascript"></script>
 <script type="text/javascript">bkLib.onDomLoaded(nicEditors.allTextAreas);</script>
 
 {% if "gme-" in GOOGLE_API_KEY %}
