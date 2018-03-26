@@ -28,6 +28,9 @@ from os.path import isfile
 
 from urlparse import urlsplit, urljoin
 
+from httplib import HTTPConnection, HTTPSConnection
+from urlparse import urlsplit
+
 from django.contrib.auth import authenticate
 from django.http import HttpResponse, HttpResponseRedirect
 from django.views.decorators.http import require_POST
@@ -495,7 +498,9 @@ def geoserver_proxy(request,
 
     url = urlsplit(raw_url)
 
+    headers = {}
     affected_layers = None
+
     if request.method in ("POST", "PUT"):
         if downstream_path in ('rest/styles', 'rest/layers',
                                'rest/workspaces') and len(request.body) > 0:

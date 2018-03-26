@@ -1140,6 +1140,7 @@ def snapshot_config(snapshot, map_obj, user, access_token):
         return None
 
     # Set up the proper layer configuration
+    # def snaplayer_config(layer, sources, user):
     def snaplayer_config(layer, sources, user, access_token):
         cfg = layer.layer_config()
         src_cfg = layer.source_config()

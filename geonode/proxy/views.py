@@ -47,6 +47,8 @@ from geonode.utils import (resolve_object,
                            zip_dir)
 from geonode import geoserver, qgis_server  # noqa
 
+from django.views.decorators.csrf import csrf_exempt
+
 TIMEOUT = 30
 
 logger = logging.getLogger(__name__)
@@ -57,7 +59,8 @@ ows_regexp = re.compile(
     "^(?i)(version)=(\d\.\d\.\d)(?i)&(?i)request=(?i)(GetCapabilities)&(?i)service=(?i)(\w\w\w)$")
 
 
-@requires_csrf_token
+#@requires_csrf_token
+@csrf_exempt
 def proxy(request, url=None, response_callback=None,
           sec_chk_hosts=True, sec_chk_rules=True, **kwargs):
     # Security rules and settings
@@ -191,6 +194,7 @@ def proxy(request, url=None, response_callback=None,
         conn = HTTPSConnection(url.hostname, url.port)
     else:
         conn = HTTPConnection(url.hostname, url.port)
+
     conn.request(request.method, locator, request.body, headers)
     response = conn.getresponse()
     content = response.read()

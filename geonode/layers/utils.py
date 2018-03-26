@@ -413,6 +413,10 @@ def file_upload(filename,
     upload_session = UploadSession.objects.create(user=theuser)
 
     # Get all the files uploaded with the layer
+    tempdir = os.path.dirname(filename)
+    for item in os.listdir(tempdir):
+        if item.endswith('.shp'):
+            filename = os.path.join(tempdir, item)
     files = get_files(filename)
 
     # Set a default title that looks nice ...

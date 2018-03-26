@@ -1394,5 +1394,6 @@ SOCIALACCOUNT_ADAPTER = 'geonode.people.adapters.SocialAccountAdapter'
 
 INVITATIONS_ADAPTER = ACCOUNT_ADAPTER
 
+
 # Choose thumbnail generator -- this is the default generator
 THUMBNAIL_GENERATOR = "geonode.layers.utils.create_gs_thumbnail_geonode"

@@ -484,6 +484,7 @@ def remove_object_permissions(instance):
 
 def _get_layer_workspace(layer):
     """Get the workspace where the input layer belongs"""
+
     workspace = layer.workspace
     if not workspace:
         default_workspace = getattr(settings, "DEFAULT_WORKSPACE", "geonode")

@@ -1725,7 +1725,6 @@ def set_time_dimension(cat, layer, time_presentation, time_presentation_res, tim
     resource.metadata = {'time': timeInfo}
     cat.save(resource)
 
-
 # main entry point to create a thumbnail - will use implementation
 # defined in settings.THUMBNAIL_GENERATOR (see settings.py)
 def create_gs_thumbnail(instance, overwrite=False):
