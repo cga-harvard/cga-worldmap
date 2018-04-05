@@ -5,7 +5,6 @@
 {% load agon_ratings_tags %}
 {% load bootstrap_tags %}
 {% load pagination_tags %}
-{% load url from future %}
 {% load base_tags %}
 {% load guardian_tags %}
 {% load client_lib_tags %}
@@ -38,6 +37,7 @@
     </style>
 
     <h2 class="page-title">{{ resource.title|default:resource.alternate }}</h2>
+    {% if storeType == 'remoteStore' %}<em><i class="fa fa-power-off {% if online %}text-success{% else %}text-danger{% endif %}"></i> {% trans "Service is" %} {% if online %}{% trans "online" %}{% else %}{% trans "offline" %}{% endif %} </em>{% endif %}
 </div>
 
 <div class="row">
@@ -256,6 +256,11 @@
 
     <ul class="list-group">
       {% if resource.storeType != "remoteStore" %}
+        {% if link_geotiff_io %}
+        <li class="list-group-item">
+          <a href="{{link_geotiff_io}}" class="btn btn-primary btn-block" target="_blank">{% trans "Analyze with" %} GeoTIFF.io</a>
+        </li>
+        {% endif %}
         <li class="list-group-item">
         {% if links or links_download %}
            <button class="btn btn-primary btn-md btn-block" data-toggle="modal" data-target="#download-layer">{% trans "Download Layer" %}</button>
