@@ -726,6 +726,8 @@ def gxp2wm(config, map_obj=None):
             bbox = layer.bbox[:-1]
             # WorldMap GXP use a different bbox representation than GeoNode
             bbox = [bbox[0], bbox[2], bbox[1], bbox[3]]
+            import ipdb; ipdb.set_trace()
+            bbox = get_lon_lat(layer.srid, bbox)
             layer_config["bbox"] = [float(coord) for coord in bbox] if layer_config["srs"] != 'EPSG:900913' \
                 else llbbox_to_mercator([float(coord) for coord in bbox])
         if is_hh:
@@ -769,8 +771,21 @@ def gxp2wm(config, map_obj=None):
     if config_is_string:
         config = json.dumps(config)
 
+    print config
     return config
 
+
+def get_lon_lat(srid, bbox):
+    from pyproj import Proj, transform
+    in_proj  = Proj(init=srid)
+    out_proj = Proj(init='EPSG:4326')
+    x1, y1 =  (bbox[0], bbox[1])
+    x2, y2 =  (bbox[2], bbox[3])
+    # with the x,y coordinates of pointx
+    x1_out, y1_out = transform(in_proj, out_proj, x1, y1)
+    # with the x,y coordinates of point pointy
+    x2_out, y2_out = transform(in_proj, out_proj, x2, y2)
+    return [x1_out, y1_out, x2_out, y2_out]
 
 def get_layer_attributes(layer):
     """
