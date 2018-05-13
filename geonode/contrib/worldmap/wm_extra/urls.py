@@ -8,7 +8,8 @@ from .views import (proxy, ajax_snapshot_history, layer_searchable_fields,
                     ajax_layer_edit_style_check, upload_layer,
                     create_pg_layer, ajax_increment_layer_stats, add_layer_wm,
                     new_map_wm, new_map_json_wm, map_view_wm, map_json_wm,
-                    map_detail_wm, add_endpoint, printmap, )
+                    map_detail_wm, add_endpoint, printmap, 
+                    get_categorys, get_most_maps,)
 
 from tastypie.api import Api
 from .api.resources import (LayerResource, TagResource, TopicCategoryResource,
@@ -53,4 +54,7 @@ urlpatterns = patterns('',
                         #url(r'^data/create_pg_layer', create_pg_layer, name='create_pg_layer'),
                         url(r'^/data/upload', upload_layer, name='data_upload'),
                         url(r'^data/layerstats', ajax_increment_layer_stats, name='layer_stats'),
+                        # TODO add urls to get the category_list and hottest/latest maps
+                        url(r'^getCategory/', get_categorys, name='getCategory'),
+                        url(r'^getMostMaps/', get_most_maps, name='getMostMaps'),
 )

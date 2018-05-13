@@ -19,7 +19,8 @@ from django.shortcuts import render_to_response, get_object_or_404, redirect
 from django.template import RequestContext
 from django.views.decorators.csrf import csrf_exempt
 
-from geonode.base.models import TopicCategory
+from geonode.people.models import Profile
+from geonode.base.models import TopicCategory, ResourceBase
 from geonode.documents.models import get_related_documents
 from geonode.geoserver.helpers import ogc_server_settings
 from geonode.layers.models import Layer
@@ -1060,3 +1061,60 @@ def layer_searchable_fields(
         "searchable_attributes": searchable_attributes,
         "status_message": status_message,
     }))
+
+# TODO get the category list
+def get_categorys(request):
+    """
+    return the category
+    :param request: language
+    :return:
+    """
+    if request.POST.has_key('language'):
+        language = request.POST['language']
+        key = 'gn_description'
+    categorys = TopicCategory.objects.all().values('id',key)
+    category_dict ={}
+    for category in categorys:
+        category_dict[category['id']] = [category[key]]
+    categoryjson = json.dumps(category_dict)
+    # from django.utils import simplejson
+    # return HttpResponse(simplejson.dumps(category, ensure_ascii=False))
+    return HttpResponse(categoryjson)
+
+
+# TODO get the major maps created by admin, or get the hotest and latest layer/map
+def get_most_maps(request):
+    """
+    return the six admin's/hottest/latest maps
+    :param request: category[0:all the category 1-20: appointed category], type['hottest','latest']
+    :return: json of resourcebase
+    """
+    resourcebase_dict = {}
+    count = 0
+    if request.POST.has_key('type'):
+        type = request.POST['type']
+    # if type==admin key='owner_id' elseif type==hottest key=popular_count else type==latest key =date
+    # order_by('-key'): the same with order by(key) asce
+    if type == 'admin':
+        key = 'owner_id'
+    else:
+        key = '-popular_count' if type == 'hottest' else '-date'
+    if request.POST['category'] != '0':
+        categoryid = int(request.POST['category'])
+        resourcebase_queryset = ResourceBase.objects.instance_of(Map)\
+        .filter(category_id=categoryid).order_by(key)[0:6]
+    else:
+        resourcebase_queryset = ResourceBase.objects.instance_of(Map)\
+        .all().order_by(key,'-popular_count')[0:6]
+    count = 0
+
+    for resourcebase in resourcebase_queryset:
+        resourcebase_dict[count] = [resourcebase.title, resourcebase.owner.username\
+        , resourcebase.thumbnail_url, resourcebase.detail_url\
+        , resourcebase.popular_count\
+        , resourcebase.date.strftime("%m-%d  %H:%M")]
+        count = count + 1
+    resourcebase_json = json.dumps(resourcebase_dict)
+    return HttpResponse(resourcebase_json)
+
+
