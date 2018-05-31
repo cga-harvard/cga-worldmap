@@ -248,4 +248,14 @@ def create_gs_layer(name, title, geometry_type, attributes=None):
         logger.error('Response was: %s' % req.text)
         raise GeoNodeException("Layer could not be created in GeoServer")
 
+    # create a style for the layer and associate it as a default style
+    from geonode.geoserver.helpers import get_sld_for
+    from django.conf import settings
+    layer = cat.get_layer(name)
+    sld = get_sld_for(cat, layer)
+    cat.create_style(name, sld, overwrite=True, raw=True, workspace=settings.DEFAULT_WORKSPACE)
+    style = cat.get_style(name, workspace=settings.DEFAULT_WORKSPACE)
+    layer.default_style = style
+    cat.save(layer)
+
     return workspace, datastore

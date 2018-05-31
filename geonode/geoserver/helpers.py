@@ -240,13 +240,23 @@ def get_sld_for(gs_catalog, layer):
     # GeoServer sometimes fails to associate a style with the data, so
     # for now we default to using a point style.(it works for lines and
     # polygons, hope this doesn't happen for rasters  though)
-    if layer.default_style is None:
+    _default_style = None
+    try:
+        _default_style = layer.default_style
+    except BaseException:
+        pass
+    if _default_style is None:
         gs_catalog._cache.clear()
-        layer = gs_catalog.get_layer(layer.name)
-    name = layer.default_style.name if layer.default_style is not None else "raster"
+        try:
+            gs_layer = gs_catalog.get_layer(layer.name)
+            name = gs_layer.default_style.name if gs_layer.default_style is not None else "raster"
+        except BaseException:
+            name = "raster"
+    else:
+        name = _default_style.name
 
     # Detect geometry type if it is a FeatureType
-    if layer.resource.resource_type == 'featureType':
+    if layer.resource and layer.resource.resource_type == 'featureType':
         res = layer.resource
         res.fetch()
         ft = res.store.get_resources(res.name)
