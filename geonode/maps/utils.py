@@ -845,7 +845,7 @@ def check_projection(name, resource):
             if -180 <= minx <= 180 and -180 <= maxx <= 180 and\
                -90  <= miny <= 90  and -90  <= maxy <= 90:
                 logger.warn('GeoServer failed to detect the projection for layer '
-                            '[%s]. Guessing EPSG:4326', name)
+                            '[%s]. Guessing EPSG:4326 as coordinates look geographic', name)
                 # If GeoServer couldn't figure out the projection, we just
                 # assume it's lat/lon to avoid a bad GeoServer configuration
 
@@ -853,12 +853,20 @@ def check_projection(name, resource):
                 resource.projection = "EPSG:4326"
                 cat.save(resource)
             else:
-                msg = ((_('GeoServer failed to detect the projection for layer ') +
-                       '[%s].' +
-                       _('It doesn\'t look like EPSG:4326, so backing out the layer.')))
-                logger.warn(msg, name)
-                cascading_delete(cat, resource)
-                raise GeoNodeException(msg % name)
+                # msg = ((_('GeoServer failed to detect the projection for layer ') +
+                #       '[%s].' +
+                #       _('It doesn\'t look like EPSG:4326, so backing out the layer.')))
+                #logger.warn(msg, name)
+                #cascading_delete(cat, resource)
+                #raise GeoNodeException(msg % name)
+                logger.warn('GeoServer failed to detect the projection for layer '
+                            '[%s]. Guessing EPSG:3857 as coordinates look projected', name)
+                # If GeoServer couldn't figure out the projection, we just
+                # assume it's lat/lon to avoid a bad GeoServer configuration
+
+                resource.latlon_bbox = resource.native_bbox
+                resource.projection = "EPSG:3857"
+                cat.save(resource)
     except:
         msg = ((_('GeoServer failed to read the layer projection for') + ' [%s] ' +
                _('so backing out the layer.')))
