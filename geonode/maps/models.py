@@ -662,6 +662,7 @@ def _get_viewer_projection_info(srid):
 _wms = None
 _csw = None
 _user, _password = settings.GEOSERVER_CREDENTIALS
+print _user, _password
 
 #def get_wms():
 #    global _wms
@@ -1425,8 +1426,8 @@ class Layer(models.Model, PermissionLevelMixin):
         if gs_resource is None:
             return
         self.srs = gs_resource.projection
-        self.llbbox = str([ max(-180,float(gs_resource.latlon_bbox[0])),max(-90,float(gs_resource.latlon_bbox[2])),min(180,float(gs_resource.latlon_bbox[1])),min(90,float(gs_resource.latlon_bbox[3]))])
-
+        # self.llbbox = str([ max(-180,float(gs_resource.latlon_bbox[0])),max(-90,float(gs_resource.latlon_bbox[2])),min(180,float(gs_resource.latlon_bbox[1])),min(90,float(gs_resource.latlon_bbox[3]))])
+        self.llbbox = str([ float(gs_resource.latlon_bbox[0]),float(gs_resource.latlon_bbox[2]),float(gs_resource.latlon_bbox[1]),float(gs_resource.latlon_bbox[3])])
         if self.srs == 'EPSG:4326':
             self.bbox = self.llbbox
         else:

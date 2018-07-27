@@ -314,7 +314,9 @@ def newmap_config(request):
 
                 center = forward_mercator((x, y))
                 if center[1] == float('-inf'):
-                    center[1] = 0
+                    # center[1] = 0
+                    center_copy = (center[0], 0)
+                    center = center_copy
 
                 if maxx == minx:
                     width_zoom = 15
