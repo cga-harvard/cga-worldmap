@@ -695,7 +695,7 @@ def layer_detail(request, layername, template='layers/layer_detail.html'):
 
     # maps owned by user needed to fill the "add to existing map section" in template
     if request.user.is_authenticated():
-        context_dict["maps"] = Map.objects.filter(owner=request.user)
+        context_dict["maps"] = Map.objects.filter(owner=request.user).order_by("title")
     return TemplateResponse(
         request, template, context=context_dict)
 
