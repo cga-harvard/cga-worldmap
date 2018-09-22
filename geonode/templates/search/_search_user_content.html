@@ -13,7 +13,7 @@
                 <li>
                     <div class="input-group">
                     <input name="text_search_input" id="text_search_input" ng-model="text_query" type="text"
-                           placeholder="Search by name" class="form-control" data-query-key='name__icontains'>
+                           placeholder="{% trans 'Search by name' %}" class="form-control" data-query-key='name__icontains'>
                     <span class="input-group-btn">
                         <button class="btn btn-primary" type="submit" id="text_search_btn"><i class="fa fa-search"></i></button>
                     </span>
@@ -44,7 +44,7 @@
   </div>
   <div class="col-md-9">
     <div class="col-md-2">
-      <span>Total: </span>
+      <span>{% trans "Total: " %}</span>
       <span ng-bind="total_counts"></span>
     </div>
     {% include "search/_sort_filters.html" %}

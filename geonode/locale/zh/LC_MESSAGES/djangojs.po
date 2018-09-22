@@ -991,5 +991,15 @@ msgstr "更新时间："
 msgid "Popular Count:"
 msgstr "浏览量："
 
+#: geonode/geonode/static/js/geonode/js/utils/thumbnail.js
+msgid "Timeout:"
+msgstr "响应超时"
+msgid "Failed from timeout: Could not create Thumbnail"
+msgstr "响应超时报错：无法创建缩略图"
+msgid "Error: "
+msgstr "错误："
+msgid "Could not create Thumbnail"
+msgstr "无法创建错略图"
+
 
 

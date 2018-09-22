@@ -265,7 +265,7 @@ msgstr "地区"
 
 #: geonode/templates/search/_region_filter.html:10
 msgid "Search by region"
-msgstr "通过地区搜索"
+msgstr "通过地区检索"
 
 #: geonode/base/models.py:80 geonode/services/models.py:106
 msgid "function performed by the responsible party"
@@ -365,7 +365,7 @@ msgstr "标题"
 
 #: geonode/base/models.py:458
 msgid "name by which the cited resource is known"
-msgstr "用已知资源命名"
+msgstr "文件的名字"
 
 #: geonode/base/models.py:459
 msgid "date"
@@ -845,7 +845,7 @@ msgstr "文档必须是一个文件或URL。"
 
 #: geonode/documents/forms.py:120 geonode/documents/forms.py:188
 msgid "A document cannot have both a file and a url."
-msgstr "文档不可兼得的文件和网址。"
+msgstr "文件不能同时是文件和网址。"
 
 #: geonode/documents/forms.py:133 geonode/documents/forms.py:201
 msgid "This file type is not allowed"
@@ -853,7 +853,7 @@ msgstr "该文件类型不允许"
 
 #: geonode/documents/forms.py:151
 msgid "Link to"
-msgstr "链接"
+msgstr "链接到"
 
 #: geonode/documents/forms.py:173
 msgid "Permissions must be valid JSON."
@@ -865,7 +865,7 @@ msgstr "文件"
 
 #: geonode/documents/models.py:72
 msgid "The URL of the document if it is external."
-msgstr "的文档的URL，如果它是外部的。"
+msgstr "如果是外部文件，请填写链接"
 
 #: geonode/documents/models.py:73
 msgid "URL"
@@ -883,7 +883,7 @@ msgstr "给此文件打分"
 #: geonode/layers/templates/layers/layer_detail.html:235
 #: geonode/maps/templates/maps/map_detail.html:73
 msgid "Average Rating"
-msgstr "平均分数"
+msgstr "平均评分"
 
 #: geonode/documents/templates/documents/document_detail.html:97
 #: geonode/layers/templates/layers/layer_detail.html:316
@@ -984,11 +984,16 @@ msgstr "用到此文件的资源"
 
 #: geonode/documents/templates/documents/document_detail.html:199
 msgid "List of resources using this document:"
-msgstr "列出用到此文件的资源"
+msgstr "使用当前文件的资源列表："
 
 #: geonode/documents/templates/documents/document_detail.html:203
 msgid "This document is related to a "
 msgstr "当前文件使用于"
+
+#: geonode/documents/templates/documents/document_detail.html:203
+#| msgid "Resource using this document"
+msgid "Resources using this document"
+msgstr "使用当前文件的资源"
 
 #: geonode/documents/templates/documents/document_detail.html:206
 msgid "This document is not related to any maps or layers"
@@ -1101,6 +1106,10 @@ msgid ""
 "\"%(document.get_absolute_url)s\">%(document_title)s</a>?\n"
 "        "
 msgstr ""
+"\n"
+"          是否确定要删除<a href="
+"\"%(document.get_absolute_url)s\">%(document_title)s</a>?\n"
+"        "
 
 #: geonode/documents/templates/documents/document_remove.html:20
 #: geonode/groups/templates/groups/group_remove.html:19
@@ -3061,7 +3070,7 @@ msgstr "用户请求通道"
 
 #: geonode/people/__init__.py:28
 msgid "A new user has requested access to the site"
-msgstr "一个新的用户已经请求进入网站"
+msgstr "一个新用户已经请求进入平台"
 
 #: geonode/people/__init__.py:29
 msgid "Account activated"
@@ -3069,7 +3078,7 @@ msgstr "账户激活"
 
 #: geonode/people/__init__.py:30
 msgid "This account is now active and can log in the site"
-msgstr "该账户现在是活动状态，可以登录该网站"
+msgstr "该账户已激活，可以登录本平台"
 
 #: geonode/people/admin.py:54
 msgid "Personal info"
@@ -3352,9 +3361,13 @@ msgstr "更改密码"
 msgid "Upload new layers"
 msgstr "上传新图层"
 
+#: geonode/people/templates/people/profile_detail.html:144
+msgid "Create a new layer"
+msgstr "创建新图层"
+
 #: geonode/people/templates/people/profile_detail.html:129
 msgid "Create a new map"
-msgstr "创建一个新的地图"
+msgstr "创建新地图"
 
 #: geonode/people/templates/people/profile_detail.html:130
 msgid "My Activities"
@@ -3378,7 +3391,7 @@ msgstr "通知"
 #: geonode/templates/500.html:228 geonode/templates/base.html:66
 #: geonode/templates/base.html.py:196
 msgid "Remote Services"
-msgstr "远程服务"
+msgstr "外部服务"
 
 #: geonode/people/templates/people/profile_detail.html:143
 #: geonode/templates/500.html:229 geonode/templates/account/invite_user.html:8
@@ -3397,7 +3410,7 @@ msgstr "GeoServer"
 #: geonode/people/templates/people/profile_detail.html:147
 #: geonode/templates/500.html:234
 msgid "Admin"
-msgstr "网站管理"
+msgstr "超级管理员"
 
 #: geonode/people/templates/people/profile_detail.html:160
 msgid "User Activities"
@@ -3589,7 +3602,7 @@ msgstr "注册新服务"
 
 #: geonode/services/templates/services/service_register.html:13
 msgid "Register New Service"
-msgstr ""
+msgstr "注册新服务"
 
 #: geonode/services/templates/services/service_register.html:23
 msgid "Service has been created:"
@@ -3601,11 +3614,15 @@ msgstr "以下层将被导入"
 
 #: geonode/services/templates/services/service_remove.html:8
 msgid "Remove Remote Service"
-msgstr "移除遥感服务"
+msgstr "移除外部服务"
 
 #: geonode/services/templates/services/service_remove.html:12
 msgid "Are you sure you want to remove"
-msgstr "您确定要删除"
+msgstr "确定删除？"
+
+#: geonode/services/templates/services/service_remove.html:12
+msgid "No services registered"
+msgstr "尚无已注册的服务。"
 
 #: geonode/services/views.py:72
 msgid ""
@@ -3743,7 +3760,7 @@ msgstr "登录"
 
 #: geonode/templates/500.html:127
 msgid "There was a problem loading this page"
-msgstr "有一个问题，加载此页"
+msgstr "在加载此页时出现问题"
 
 #: geonode/templates/500.html:129
 msgid ""
@@ -3756,8 +3773,8 @@ msgid ""
 "            "
 msgstr ""
 "\n"
-"            请联系您的GeoNode管理员（如果他正确安装了GeoNode"
-"他也许已经收到一封自动邮件。\n"
+"            请联系GeoNode管理员（如果他正确安装了GeoNode"
+"也许他已经收到一封邮件。\n"
 "            如果您是网站管理员，能够调试去看真正的错误并修复错误或将其归档入"
 "<a href=\"http://github.com/GeoNode/geonode/issues\">GeoNode's issue tracker</a>\n"
 "            "
@@ -3976,7 +3993,7 @@ msgstr ""
 "在 %(site_name)s 的用户已经创建了使用该电子邮件地址的帐户。为了证实该电子邮"
 "件地址，转到 %(activate_url)s \n"
 "\n"
-"如果您没有注册该网站，您可以忽略此消息。\n"
+"如果您没有注册，您可以忽略此消息。\n"
 
 #: geonode/templates/account/email/email_confirmation_subject.txt:1
 #, python-format
@@ -4440,7 +4457,7 @@ msgstr ""
 "opacity:0.5 } );</code></p>\n"
 "\n"
 "    <h3>Shapefile/GeoJSON/GML输出</h3>\n"
-"    <p>利用WFS协议从GeoNode网站服务中得到数据。举个例子，为了得到完整的Nicaraguan行"
+"    <p>利用WFS协议从GeoNode服务中得到数据。举个例子，为了得到完整的Nicaraguan行"
 "政边界：</p>\n"
 "    <p><code>http://demo.geonode.org/geoserver/wfs?request=GetFeature&#38;"
 "typeName=risk:nicaragua_admin&#38;outputformat=SHAPE-ZIP</code></p>\n"
@@ -4820,7 +4837,7 @@ msgstr "您的账户现在处于活动状态"
 
 #: geonode/templates/pinax/notifications/account_approve/full.txt:1
 msgid "has requested access to the site."
-msgstr "已经请求进入网站。"
+msgstr "已请求进入平台。"
 
 #: geonode/templates/pinax/notifications/account_approve/full.txt:1
 msgid ""
@@ -4829,7 +4846,7 @@ msgstr "您可以在管理部分通过设置用户为活动状态进入"
 
 #: geonode/templates/pinax/notifications/account_approve/short.txt:3
 msgid "A user has requested access to the site"
-msgstr "一个用户已经请求进入网站"
+msgstr "一个用户已请求进入平台"
 
 #: geonode/templates/pinax/notifications/document_comment/full.txt:3
 msgid "A comment has been posted for the document"
@@ -5137,6 +5154,14 @@ msgstr "过滤器"
 msgid "search"
 msgstr "搜索"
 
+#: geonode/templates/search/_search_user_content.html:16
+msgid "Search by name"
+msgstr "通过名称检索"
+
+#: geonode/templates/search/_search_user_content.html:47
+msgid "Total: "
+msgstr "共计："
+
 #: geonode/templates/search/_sort_filters.html:36
 #: geonode/templates/search/_sort_filters.html:42
 #: geonode/templates/search/_sort_filters.html:47
@@ -5170,10 +5195,8 @@ msgid "Text"
 msgstr "文本"
 
 #: geonode/templates/search/_text_filter.html:10
-#, fuzzy
-#| msgid "Search"
 msgid "Search by text"
-msgstr "查询"
+msgstr "通过文本检索"
 
 #: geonode/templates/search/search.html:6
 #: geonode/templates/search/search.html:12
@@ -5243,30 +5266,6 @@ msgstr "权限等级不够。"
 #: geonode/utils.py:568
 msgid "Permission Denied"
 msgstr "权限级别"
-
-#: geonode/utils.py:67 geonode/maps/models.py:58
-msgid "<h4>About Us</h4><p>\
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\
-    A large amount of geographical information which is closely related to human activities exists in the \
-    brilliant human civilization, numerous documents since ancient times, as well as the vast land and ocean. \
-    For example, the geographical distribution of individuals, the traces and the social relations for a single \
-    person, the migration of a group, as well as the existence, distribution and change of a region and \
-    trajectory for non-living things; as for a place, it also contains the people, events, things and other \
-    geographical information in previous time.</p>\
-    <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\
-    The Academic Map Publishing Platform, established by Zhejiang University and Harvard University \
-    together, is not only an integrated database providing multi-functional query services, but also a display \
-    platform ready for users to present their research productions about geographic information and visualize \
-    analysis and select. The big data formed by the platform, will greatly contribute to future scientific \
-    research, overnment decision-making and social services.</p>"
-msgstr "<h4>关于我们</h4><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\
-灿烂辉煌的人类文明、浩如烟海的古今文献以及广袤无垠的陆地海洋，存在着海量的与人类活动息息相\
-关的地理信息。就单个人物来说，包括人物的籍贯、行迹、社会关系的地理分布；就群体来说，包括一个群体\
-的地理分布和迁徙轨迹；就非生命的物体来说，也有其存在、分布和变化的地理区域；就一个地方来说，则又\
-包含了既往时间里人、事、物等地理信息的总汇。</p>\
-<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;\
-由浙江大学与哈佛大学共建的学术地图发布平台愿为广大用户提供地理信息研究成果的发布、可视化分析\
-及多功能查询服务，平台所形成的大数据，可以为未来科学研究、政府决策及社会服务提供重要的参考。</p>"
 
 #: geonode/templates/pinax/notifications/notice_settings.html
 msgid "Notification Settings"
@@ -5367,7 +5366,7 @@ msgstr "修改"
 #~ msgstr "看"
 
 #~ msgid "Average rating"
-#~ msgstr "平均分"
+#~ msgstr "平均评分"
 
 #~ msgid "votes"
 #~ msgstr "赞成"
@@ -5376,7 +5375,7 @@ msgstr "修改"
 #~ msgstr "您没有权限看这份文档"
 
 #~ msgid "Remote Thumbnail"
-#~ msgstr "遥感缩略图"
+#~ msgstr "远程缩略图"
 
 #~ msgid "Group details"
 #~ msgstr "群体详细信息"
