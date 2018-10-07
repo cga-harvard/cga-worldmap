@@ -1,15 +1,17 @@
 import ast
 import json
+import logging
 import math
 import re
 import urlparse
 from httplib import HTTPConnection, HTTPSConnection
 from urlparse import urlsplit
+from requests import Request
 
 from guardian.shortcuts import get_perms
 
 from django.conf import settings
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils.http import is_safe_url
 from django.http.request import validate_host
 from django.contrib.auth.decorators import login_required
@@ -17,16 +19,19 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse, HttpResponseNotAllowed
 from django.shortcuts import render, get_object_or_404
+from django.template.response import TemplateResponse
 from django.utils.translation import ugettext as _
 from django.views.decorators.csrf import csrf_exempt
 
+from geonode import geoserver, qgis_server
 from geonode.base.models import TopicCategory
 from geonode.documents.models import get_related_documents
 from geonode.geoserver.helpers import ogc_server_settings
 from geonode.layers.models import Layer
 from geonode.maps.models import Map, MapLayer, MapSnapshot
 from geonode.utils import forward_mercator, default_map_config
-from geonode.utils import llbbox_to_mercator
+from geonode.utils import (check_ogc_backend, llbbox_to_mercator, 
+                            bbox_to_projection, GXPLayer, GXPMap)
 from geonode.layers.views import _resolve_layer
 from geonode.maps.views import _resolve_map, _PERMISSION_MSG_VIEW, clean_config
 # from geonode.maps.views import snapshot_config
@@ -43,6 +48,7 @@ from .encode import despam, XssCleaner
 _PERMISSION_MSG_LOGIN = _("You must be logged in to save this map")
 _PERMISSION_MSG_SAVE = _("You are not permitted to save or edit this map.")
 ows_sub = re.compile(r"[&\?]+SERVICE=WMS|[&\?]+REQUEST=GetCapabilities", re.IGNORECASE)
+logger = logging.getLogger("geonode.layers.views")
 
 
 @csrf_exempt
@@ -427,7 +433,6 @@ def new_map_json_wm(request):
 def new_map_config(request):
     '''
     View that creates a new map.
-
     If the query argument 'copy' is given, the initial map is
     a copy of the map with the id specified, otherwise the
     default map configuration is used.  If copy is specified
@@ -651,6 +656,408 @@ def map_detail_wm(request, mapid, snapshot=None, template='wm_extra/maps/map_det
         context_dict["social_links"] = build_social_links(request, map_obj)
 
     return render(request, template, context_dict)
+
+
+def layer_detail_wm(request, layername, template='wm_extra/layers/layer_detail.html'):
+    layer = _resolve_layer(
+        request,
+        layername,
+        'base.view_resourcebase',
+        _PERMISSION_MSG_VIEW)
+
+    # assert False, str(layer_bbox)
+    config = layer.attribute_config()
+
+    # Add required parameters for GXP lazy-loading
+    layer_bbox = layer.bbox[0:4]
+    bbox = layer_bbox[:]
+    bbox[0] = float(layer_bbox[0])
+    bbox[1] = float(layer_bbox[2])
+    bbox[2] = float(layer_bbox[1])
+    bbox[3] = float(layer_bbox[3])
+
+    def decimal_encode(bbox):
+        import decimal
+        _bbox = []
+        for o in [float(coord) for coord in bbox]:
+            if isinstance(o, decimal.Decimal):
+                o = (str(o) for o in [o])
+            _bbox.append(o)
+        return _bbox
+
+    def sld_definition(style):
+        from urllib import quote
+        _sld = {
+            "title": style.sld_title or style.name,
+            "legend": {
+                "height": "40",
+                "width": "22",
+                "href": layer.ows_url +
+                "?service=wms&request=GetLegendGraphic&format=image%2Fpng&width=20&height=20&layer=" +
+                quote(layer.service_typename, safe=''),
+                "format": "image/png"
+            },
+            "name": style.name
+        }
+        return _sld
+
+    if hasattr(layer, 'srid'):
+        config['crs'] = {
+            'type': 'name',
+            'properties': layer.srid
+        }
+    # Add required parameters for GXP lazy-loading
+    attribution = "%s %s" % (layer.owner.first_name,
+                             layer.owner.last_name) if layer.owner.first_name or layer.owner.last_name else str(
+        layer.owner)
+    srs = getattr(settings, 'DEFAULT_MAP_CRS', 'EPSG:3857')
+    srs_srid = int(srs.split(":")[1]) if srs != "EPSG:900913" else 3857
+    config["attribution"] = "<span class='gx-attribution-title'>%s</span>" % attribution
+    config["format"] = getattr(
+        settings, 'DEFAULT_LAYER_FORMAT', 'image/png')
+    config["title"] = layer.title
+    config["wrapDateLine"] = True
+    config["visibility"] = True
+    config["srs"] = srs
+    config["bbox"] = decimal_encode(
+        bbox_to_projection([float(coord) for coord in layer_bbox] + [layer.srid, ],
+                           target_srid=int(srs.split(":")[1]))[:4])
+
+    config["capability"] = {
+        "abstract": layer.abstract,
+        "name": layer.alternate,
+        "title": layer.title,
+        "queryable": True,
+        "storeType": layer.storeType,
+        "bbox": {
+            layer.srid: {
+                "srs": layer.srid,
+                "bbox": decimal_encode(bbox)
+            },
+            srs: {
+                "srs": srs,
+                "bbox": decimal_encode(
+                    bbox_to_projection([float(coord) for coord in layer_bbox] + [layer.srid, ],
+                                       target_srid=srs_srid)[:4])
+            },
+            "EPSG:4326": {
+                "srs": "EPSG:4326",
+                "bbox": decimal_encode(bbox) if layer.srid == 'EPSG:4326' else
+                decimal_encode(bbox_to_projection(
+                    [float(coord) for coord in layer_bbox] + [layer.srid, ], target_srid=4326)[:4])
+            },
+            "EPSG:900913": {
+                "srs": "EPSG:900913",
+                "bbox": decimal_encode(bbox) if layer.srid == 'EPSG:900913' else
+                decimal_encode(bbox_to_projection(
+                    [float(coord) for coord in layer_bbox] + [layer.srid, ], target_srid=3857)[:4])
+            }
+        },
+        "srs": {
+            srs: True
+        },
+        "formats": ["image/png", "application/atom xml", "application/atom+xml", "application/json;type=utfgrid",
+                    "application/openlayers", "application/pdf", "application/rss xml", "application/rss+xml",
+                    "application/vnd.google-earth.kml", "application/vnd.google-earth.kml xml",
+                    "application/vnd.google-earth.kml+xml", "application/vnd.google-earth.kml+xml;mode=networklink",
+                    "application/vnd.google-earth.kmz", "application/vnd.google-earth.kmz xml",
+                    "application/vnd.google-earth.kmz+xml", "application/vnd.google-earth.kmz;mode=networklink",
+                    "atom", "image/geotiff", "image/geotiff8", "image/gif", "image/gif;subtype=animated",
+                    "image/jpeg", "image/png8", "image/png; mode=8bit", "image/svg", "image/svg xml",
+                    "image/svg+xml", "image/tiff", "image/tiff8", "image/vnd.jpeg-png",
+                    "kml", "kmz", "openlayers", "rss", "text/html; subtype=openlayers", "utfgrid"],
+        "attribution": {
+            "title": attribution
+        },
+        "infoFormats": ["text/plain", "application/vnd.ogc.gml", "text/xml", "application/vnd.ogc.gml/3.1.1",
+                        "text/xml; subtype=gml/3.1.1", "text/html", "application/json"],
+        "styles": [sld_definition(s) for s in layer.styles.all()],
+        "prefix": layer.alternate.split(":")[0] if ":" in layer.alternate else "",
+        "keywords": [k.name for k in layer.keywords.all()] if layer.keywords else [],
+        "llbbox": decimal_encode(bbox) if layer.srid == 'EPSG:4326' else
+        decimal_encode(bbox_to_projection(
+            [float(coord) for coord in layer_bbox] + [layer.srid, ], target_srid=4326)[:4])
+    }
+
+    all_times = None
+    if check_ogc_backend(geoserver.BACKEND_PACKAGE):
+        from geonode.geoserver.views import get_capabilities
+        workspace, layername = layer.alternate.split(
+            ":") if ":" in layer.alternate else (None, layer.alternate)
+        # WARNING Please make sure to have enabled DJANGO CACHE as per
+        # https://docs.djangoproject.com/en/2.0/topics/cache/#filesystem-caching
+        wms_capabilities_resp = get_capabilities(
+            request, layer.id, tolerant=True)
+        if wms_capabilities_resp.status_code >= 200 and wms_capabilities_resp.status_code < 400:
+            wms_capabilities = wms_capabilities_resp.getvalue()
+            if wms_capabilities:
+                import xml.etree.ElementTree as ET
+                e = ET.fromstring(wms_capabilities)
+                for atype in e.findall(
+                        "./[Name='%s']/Extent[@name='time']" % (layername)):
+                    dim_name = atype.get('name')
+                    if dim_name:
+                        dim_name = str(dim_name).lower()
+                        if dim_name == 'time':
+                            dim_values = atype.text
+                            if dim_values:
+                                all_times = dim_values.split(",")
+                                break
+        if all_times:
+            config["capability"]["dimensions"] = {
+                "time": {
+                    "name": "time",
+                    "units": "ISO8601",
+                    "unitsymbol": None,
+                    "nearestVal": False,
+                    "multipleVal": False,
+                    "current": False,
+                    "default": "current",
+                    "values": all_times
+                }
+            }
+
+    if layer.storeType == "remoteStore":
+        service = layer.remote_service
+        source_params = {}
+        if service.type in ('REST_MAP', 'REST_IMG'):
+            source_params = {
+                "ptype": service.ptype,
+                "remote": True,
+                "url": service.service_url,
+                "name": service.name,
+                "title": "[R] %s" % service.title}
+        maplayer = GXPLayer(
+            name=layer.alternate,
+            ows_url=layer.ows_url,
+            layer_params=json.dumps(config),
+            source_params=json.dumps(source_params)
+        )
+    else:
+        maplayer = GXPLayer(
+            name=layer.alternate,
+            ows_url=layer.ows_url,
+            layer_params=json.dumps(config)
+        )
+
+    # Update count for popularity ranking,
+    # but do not includes admins or resource owners
+    layer.view_count_up(request.user)
+
+    # center/zoom don't matter; the viewer will center on the layer bounds
+    map_obj = GXPMap(
+        sender=Layer,
+        projection=getattr(
+            settings,
+            'DEFAULT_MAP_CRS',
+            'EPSG:3857'))
+
+    NON_WMS_BASE_LAYERS = [
+        la for la in default_map_config(request)[1] if la.ows_url is None]
+
+    metadata = layer.link_set.metadata().filter(
+        name__in=settings.DOWNLOAD_FORMATS_METADATA)
+
+    granules = None
+    all_granules = None
+    all_times = None
+    filter = None
+    if layer.is_mosaic:
+        try:
+            cat = gs_catalog
+            cat._cache.clear()
+            store = cat.get_store(layer.name)
+            coverages = cat.mosaic_coverages(store)
+
+            filter = None
+            try:
+                if request.GET["filter"]:
+                    filter = request.GET["filter"]
+            except BaseException:
+                pass
+
+            offset = 10 * (request.page - 1)
+            granules = cat.mosaic_granules(
+                coverages['coverages']['coverage'][0]['name'],
+                store,
+                limit=10,
+                offset=offset,
+                filter=filter)
+            all_granules = cat.mosaic_granules(
+                coverages['coverages']['coverage'][0]['name'], store, filter=filter)
+        except BaseException:
+            granules = {"features": []}
+            all_granules = {"features": []}
+
+    if check_ogc_backend(geoserver.BACKEND_PACKAGE):
+        from geonode.geoserver.views import get_capabilities
+        workspace, layername = layer.alternate.split(
+            ":") if ":" in layer.alternate else (None, layer.alternate)
+        # WARNING Please make sure to have enabled DJANGO CACHE as per
+        # https://docs.djangoproject.com/en/2.0/topics/cache/#filesystem-caching
+        wms_capabilities_resp = get_capabilities(
+            request, layer.id, tolerant=True)
+        if wms_capabilities_resp.status_code >= 200 and wms_capabilities_resp.status_code < 400:
+            wms_capabilities = wms_capabilities_resp.getvalue()
+            if wms_capabilities:
+                import xml.etree.ElementTree as ET
+                e = ET.fromstring(wms_capabilities)
+                for atype in e.findall(
+                        "./[Name='%s']/Extent[@name='time']" % (layername)):
+                    dim_name = atype.get('name')
+                    if dim_name:
+                        dim_name = str(dim_name).lower()
+                        if dim_name == 'time':
+                            dim_values = atype.text
+                            if dim_values:
+                                all_times = dim_values.split(",")
+                                break
+
+    # a flag to be used for qgis server
+    show_popup = False
+    if 'show_popup' in request.GET and request.GET["show_popup"]:
+        show_popup = True
+
+    context_dict = {
+        'resource': layer,
+        'perms_list': get_perms(request.user, layer.get_self_resource()),
+        "permissions_json": _perms_info_json(layer),
+        "documents": get_related_documents(layer),
+        "metadata": metadata,
+        "is_layer": True,
+        "wps_enabled": settings.OGC_SERVER['default']['WPS_ENABLED'],
+        "granules": granules,
+        "all_granules": all_granules,
+        "all_times": all_times,
+        "show_popup": show_popup,
+        "filter": filter,
+        "storeType": layer.storeType,
+        # "online": (layer.remote_service.probe == 200) if layer.storeType == "remoteStore" else True
+    }
+
+    if request and 'access_token' in request.session:
+        access_token = request.session['access_token']
+    else:
+        u = uuid.uuid1()
+        access_token = u.hex
+
+    context_dict["viewer"] =  gxp2wm(json.dumps(map_obj.viewer_json(
+        request, * (NON_WMS_BASE_LAYERS + [maplayer]))))
+    context_dict["preview"] = getattr(
+        settings,
+        'GEONODE_CLIENT_LAYER_PREVIEW_LIBRARY',
+        'geoext')
+    context_dict["crs"] = getattr(
+        settings,
+        'DEFAULT_MAP_CRS',
+        'EPSG:3857')
+
+    # provide bbox in EPSG:4326 for leaflet
+    if context_dict["preview"] == 'leaflet':
+        srid, wkt = layer.geographic_bounding_box.split(';')
+        srid = re.findall(r'\d+', srid)
+        geom = GEOSGeometry(wkt, srid=int(srid[0]))
+        geom.transform(4326)
+        context_dict["layer_bbox"] = ','.join([str(c) for c in geom.extent])
+
+    if layer.storeType == 'dataStore':
+        links = layer.link_set.download().filter(
+            Q(name__in=settings.DOWNLOAD_FORMATS_VECTOR) |
+            Q(link_type='original'))
+    else:
+        links = layer.link_set.download().filter(
+            Q(name__in=settings.DOWNLOAD_FORMATS_RASTER) |
+            Q(link_type='original'))
+    links_view = [item for idx, item in enumerate(links) if
+                  item.url and 'wms' in item.url or 'gwc' in item.url]
+    links_download = [item for idx, item in enumerate(
+        links) if item.url and 'wms' not in item.url and 'gwc' not in item.url]
+    for item in links_view:
+        if item.url and access_token and 'access_token' not in item.url:
+            params = {'access_token': access_token}
+            item.url = Request('GET', item.url, params=params).prepare().url
+    for item in links_download:
+        if item.url and access_token and 'access_token' not in item.url:
+            params = {'access_token': access_token}
+            item.url = Request('GET', item.url, params=params).prepare().url
+
+    if request.user.has_perm('view_resourcebase', layer.get_self_resource()):
+        context_dict["links"] = links_view
+    if request.user.has_perm(
+        'download_resourcebase',
+            layer.get_self_resource()):
+        if layer.storeType == 'dataStore':
+            links = layer.link_set.download().filter(
+                name__in=settings.DOWNLOAD_FORMATS_VECTOR)
+        else:
+            links = layer.link_set.download().filter(
+                name__in=settings.DOWNLOAD_FORMATS_RASTER)
+        context_dict["links_download"] = links_download
+
+    if settings.SOCIAL_ORIGINS:
+        context_dict["social_links"] = build_social_links(request, layer)
+    layers_names = layer.alternate
+    try:
+        if settings.DEFAULT_WORKSPACE and settings.DEFAULT_WORKSPACE in layers_names:
+            workspace, name = layers_names.split(':', 1)
+        else:
+            name = layers_names
+    except BaseException:
+        logger.error("Can not identify workspace type and layername")
+
+    context_dict["layer_name"] = json.dumps(layers_names)
+
+    try:
+        # get type of layer (raster or vector)
+        if layer.storeType == 'coverageStore':
+            context_dict["layer_type"] = "raster"
+        elif layer.storeType == 'dataStore':
+            if layer.has_time:
+                context_dict["layer_type"] = "vector_time"
+            else:
+                context_dict["layer_type"] = "vector"
+
+            location = "{location}{service}".format(** {
+                'location': settings.OGC_SERVER['default']['LOCATION'],
+                'service': 'wms',
+            })
+            # get schema for specific layer
+            username = settings.OGC_SERVER['default']['USER']
+            password = settings.OGC_SERVER['default']['PASSWORD']
+            schema = get_schema(
+                location,
+                name,
+                username=username,
+                password=password)
+
+            # get the name of the column which holds the geometry
+            if 'the_geom' in schema['properties']:
+                schema['properties'].pop('the_geom', None)
+            elif 'geom' in schema['properties']:
+                schema['properties'].pop("geom", None)
+
+            # filter the schema dict based on the values of layers_attributes
+            layer_attributes_schema = []
+            for key in schema['properties'].keys():
+                layer_attributes_schema.append(key)
+
+            filtered_attributes = layer_attributes_schema
+            context_dict["schema"] = schema
+            context_dict["filtered_attributes"] = filtered_attributes
+
+    except BaseException:
+        logger.error(
+            "Possible error with OWSLib. Turning all available properties to string")
+
+    if settings.GEOTIFF_IO_ENABLED:
+        from geonode.contrib.geotiffio import create_geotiff_io_url
+        context_dict["link_geotiff_io"] = create_geotiff_io_url(layer, access_token)
+
+    # maps owned by user needed to fill the "add to existing map section" in template
+    if request.user.is_authenticated():
+        context_dict["maps"] = Map.objects.filter(owner=request.user).order_by("title")
+    return TemplateResponse(
+        request, template, context_dict)
 
 
 def uniqifydict(seq, item):
@@ -887,7 +1294,6 @@ def snapshot_config(snapshot, map_obj, request):
         """
         Generate a dict that can be serialized to a GXP layer configuration
         suitable for loading this layer.
-
         The "source" property will be left unset; the layer is not aware of the
         name assigned to its source plugin.  See
         :method:`geonode.maps.models.Map.viewer_json` for an example of
