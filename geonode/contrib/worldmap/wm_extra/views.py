@@ -433,7 +433,8 @@ def add_layers_to_map_config(request, map_obj, layer_names, add_base_layers=True
             # invisible layer, skip inclusion
             continue
 
-        layer_bbox = layer.bbox
+        #layer_bbox = layer.bbox
+        layer_bbox = layer.ll_bbox
         # assert False, str(layer_bbox)
         if bbox is None:
             bbox = list(layer_bbox[0:4])
@@ -452,11 +453,25 @@ def add_layers_to_map_config(request, map_obj, layer_names, add_base_layers=True
         config["title"] = title
         config["queryable"] = True
 
-        config["srs"] = getattr(
+        default_srs = getattr(
             settings, 'DEFAULT_MAP_CRS', 'EPSG:900913')
-
+        config["srs"] = default_srs
         config["bbox"] = bbox if config["srs"] != 'EPSG:900913' \
             else llbbox_to_mercator([float(coord) for coord in bbox])
+
+        def decimal_encode(bbox):
+            import decimal
+            _bbox = []
+            for o in [float(coord) for coord in bbox]:
+                if isinstance(o, decimal.Decimal):
+                    o = (str(o) for o in [o])
+                _bbox.append(o)
+            # Must be in the form : [x0, x1, y0, y1
+            return [_bbox[0], _bbox[2], _bbox[1], _bbox[3]]
+
+        config["bbox"] = decimal_encode(
+            bbox_to_projection([float(coord) for coord in layer_bbox[0:4]] + [layer.srid, ],
+                               target_srid=int(default_srs.split(":")[1]))[:4])
 
         access_token = request.session['access_token'] if request and 'access_token' in request.session else None
         if layer.storeType == "remoteStore":
